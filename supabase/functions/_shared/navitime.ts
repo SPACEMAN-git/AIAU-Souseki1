@@ -47,7 +47,7 @@ export function navitimeKey(): string | undefined {
 /** Max NAVITIME calls a single batch request may spend (quota guard). */
 export function navitimeMaxCalls(): number {
   const raw = Number(Deno.env.get('NAVITIME_MAX_CALLS_PER_REQUEST'))
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 60
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 100
 }
 
 /**
