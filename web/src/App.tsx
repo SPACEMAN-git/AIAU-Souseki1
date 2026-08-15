@@ -21,6 +21,7 @@ export default function App() {
     searching,
     searchError,
     fallbackNotice,
+    fallbackReason,
   } = store
   const abortRef = useRef<AbortController | null>(null)
 
@@ -50,7 +51,7 @@ export default function App() {
       const st = useAppStore.getState()
       st.setResults(out.results)
       st.setIsochrone(out.isochrone)
-      st.setFallbackNotice(out.fallbackUsed)
+      st.setFallbackNotice(out.fallbackUsed, out.fallbackReason)
       st.setDebug(out.debug)
       syncStateToUrl()
     } catch (err) {
@@ -88,7 +89,13 @@ export default function App() {
       <SearchBar onSearch={doSearch} />
       {fallbackNotice && (
         <div className="bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
-          ⚠ {t(locale, 'fallbackNotice')}
+          ⚠{' '}
+          {t(
+            locale,
+            fallbackReason === 'quota_exceeded'
+              ? 'fallbackNoticeQuota'
+              : 'fallbackNotice',
+          )}
         </div>
       )}
       {searchError && (

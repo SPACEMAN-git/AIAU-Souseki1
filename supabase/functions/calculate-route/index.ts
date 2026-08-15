@@ -1,7 +1,11 @@
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabaseAdmin.ts'
 import { commuteCacheKey } from '../_shared/cacheKey.ts'
-import { navitimeKey, navitimeTransitRoute } from '../_shared/navitime.ts'
+import {
+  navitimeKey,
+  navitimeQuotaExceeded,
+  navitimeTransitRoute,
+} from '../_shared/navitime.ts'
 
 interface RouteBody {
   cacheKey?: string
@@ -11,7 +15,7 @@ interface RouteBody {
   arrivalTime?: string
 }
 
-const CACHE_TTL_HOURS = 24 * 7
+const CACHE_TTL_HOURS = 24 * 30
 
 /**
  * Server-side single route calculation. Checks commute_cache first,
@@ -100,7 +104,13 @@ Deno.serve(async (req) => {
     }
 
     if (!result) {
-      return jsonResponse({ error: 'provider_unavailable' }, 503)
+      return jsonResponse(
+        {
+          error: 'provider_unavailable',
+          reason: navitimeQuotaExceeded() ? 'quota_exceeded' : 'no_route',
+        },
+        503,
+      )
     }
 
     await sb.from('commute_cache').upsert({
