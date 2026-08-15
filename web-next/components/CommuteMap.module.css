@@ -51,6 +51,21 @@
   opacity: 0.7;
 }
 
+/* 勤務先から徒歩圏内の主要起点駅。勤務先より弱く、候補駅より目立たせる */
+.accessMarker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: #0f9d58;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 1;
+}
+
 .popup {
   color: #111;
   font-size: 0.85rem;
