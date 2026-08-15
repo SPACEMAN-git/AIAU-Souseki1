@@ -1,6 +1,8 @@
 # 架构设计 — 通勤時間ベース賃貸検索 MVP
 
 > 3 天黑客松 MVP。优先完成度，架构从简。
+>
+> 仓库中并存两个前端：`web/`（团队的 Vite + React 版本）和 `web-next/`（本文档描述的 Next.js 版本）。本文档只涉及 `web-next/`。
 
 ## 1. 产品流程
 
@@ -37,7 +39,7 @@
   用普通 lat/lng 列 + bounding-box 查询，不引入 PostGIS。
 - 不做用户系统/收藏；搜索条件放 URL query + React state。
 
-## 3. 前端组件（web/）
+## 3. 前端组件（web-next/）
 
 | 组件 | 职责 |
 |---|---|
@@ -116,8 +118,8 @@ seed（`supabase/seed/`）均入库；secrets 只经 `supabase secrets set` / Ve
 
 | 变量 | 位置 | 说明 |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | web/.env.local / Vercel | Supabase 项目 URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web/.env.local / Vercel | Supabase 匿名 key（RLS 只读） |
+| `NEXT_PUBLIC_SUPABASE_URL` | web-next/.env.local / Vercel | Supabase 项目 URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web-next/.env.local / Vercel | Supabase 匿名 key（RLS 只读） |
 | `RAPIDAPI_KEY` | Supabase Secrets | RapidAPI key，仅 Edge Function 使用 |
 
 真实 key 一律不入库，仓库只维护 `.env.example`。
