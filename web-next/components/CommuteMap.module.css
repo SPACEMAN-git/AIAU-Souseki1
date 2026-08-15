@@ -66,6 +66,17 @@
   opacity: 1;
 }
 
+/* 路線選択中: 沿線の候補駅を強調し、それ以外は視覚優先度を下げる */
+.onLineMarker {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 35%);
+  opacity: 1;
+}
+
+.offLineMarker {
+  opacity: 0.3;
+}
+
 .popup {
   color: #111;
   font-size: 0.85rem;

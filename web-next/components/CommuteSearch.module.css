@@ -143,6 +143,62 @@
   border-color: #0f9d58;
 }
 
+/* 路線選択（同時に表示するのは 1 本だけ） */
+.lineBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+
+.selectedLine {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.lineStation {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.lineButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lineButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.lineButton:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.lineButtonActive {
+  border-width: 2px;
+  font-weight: 700;
+}
+
+.lineSwatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
 .count {
   font-size: 0.95rem;
   font-weight: 600;
