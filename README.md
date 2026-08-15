@@ -67,9 +67,9 @@ supabase secrets set ORS_API_KEY=...             # OpenRouteService
 | secret | 既定値 | 用途 |
 | --- | --- | --- |
 | `NAVITIME_RAPIDAPI_HOST` | `navitime-route-totalnavi.p.rapidapi.com` | RapidAPI ホスト |
-| `NAVITIME_MAX_CALLS_PER_REQUEST` | `60` | 1 検索が消費できる NAVITIME 呼び出し上限（クォータ保護） |
+| `NAVITIME_MAX_CALLS_PER_REQUEST` | `100` | 1 検索が消費できる NAVITIME 呼び出し上限（クォータ保護） |
 
-NAVITIME にはバッチ経路 API がないため、`calculate-commute-batch` は未キャッシュの物件のみ並列度 4 で個別に `route_transit` を呼び、結果を `commute_cache`（TTL 3 日）に保存します。未キャッシュ件数が上限を超える検索は `503` を返し、実経路と推定値が混在しないよう全件デモ推定へ降級します。
+NAVITIME にはバッチ経路 API がないため、`calculate-commute-batch` は未キャッシュの物件のみ並列度 6 で個別に `route_transit` を呼び、結果を `commute_cache`（TTL 3 日）に保存します。未キャッシュ件数が上限を超える場合は勤務地に近い順に上限まで実経路を取得し、残り（最も遠く通勤時間上限を超える可能性が高い物件）は結果から除外します。
 
 キー未設定時、各 Edge Function は `503 provider_unavailable` を返し、フロントは自動的にデモ推定モードへ降級します（UI にバナー表示）。NAVITIME の Web ページのスクレイピングは行いません。結果は `commute_cache` / `isochrone_cache` に TTL 付きでキャッシュされます。
 

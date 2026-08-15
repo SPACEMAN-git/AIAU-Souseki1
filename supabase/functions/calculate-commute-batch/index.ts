@@ -9,7 +9,7 @@ import {
 } from '../_shared/navitime.ts'
 
 const CACHE_TTL_HOURS = 24 * 3
-const CONCURRENCY = 4
+const CONCURRENCY = 6
 
 interface Origin {
   id: string
@@ -17,14 +17,23 @@ interface Origin {
   lng: number
 }
 
+/** Cheap ordering metric (no need for true distance) with lat scaling. */
+function squaredDistance(a: Origin, b: { lat: number; lng: number }): number {
+  const dLat = a.lat - b.lat
+  const dLng = (a.lng - b.lng) * Math.cos((a.lat * Math.PI) / 180)
+  return dLat * dLat + dLng * dLng
+}
+
 /**
  * Batch commute verification. NAVITIME has no batch endpoint, so misses
  * are fanned out with limited concurrency behind the shared
  * commute_cache; the per-request call budget guards the API quota.
- * Returns 503 provider_unavailable (whole batch) when the key is
- * missing, the mode is not transit, or the budget cannot cover the
- * uncached origins, so the frontend falls back to demo estimation for
- * every listing instead of mixing real and estimated times.
+ * When there are more uncached origins than the budget allows, the
+ * ones closest to the destination are routed first and the remaining
+ * (farthest, hence least likely to be inside the commute limit) are
+ * skipped rather than degrading the whole batch to estimates.
+ * Returns 503 provider_unavailable only when the key is missing, the
+ * mode is not transit, or no route could be produced at all.
  */
 Deno.serve(async (req) => {
   const opt = handleOptions(req)
@@ -77,15 +86,15 @@ Deno.serve(async (req) => {
       else misses.push(o)
     }
 
-    if (misses.length > navitimeMaxCalls()) {
-      return jsonResponse(
-        { error: 'provider_unavailable', reason: 'call_budget_exceeded' },
-        503,
-      )
-    }
+    const budget = navitimeMaxCalls()
+    const byDistance = misses.sort(
+      (a, b) => squaredDistance(a, destination) - squaredDistance(b, destination),
+    )
+    const targets = byDistance.slice(0, budget)
+    const skipped = byDistance.length - targets.length
 
     let failed = 0
-    const queue = [...misses]
+    const queue = [...targets]
     const workers = Array.from(
       { length: Math.min(CONCURRENCY, queue.length) },
       async () => {
@@ -130,9 +139,10 @@ Deno.serve(async (req) => {
       routes,
       stats: {
         requested: body.origins.length,
-        cacheHits: routes.length - (misses.length - failed),
-        apiCalls: misses.length,
+        cacheHits: routes.length - (targets.length - failed),
+        apiCalls: targets.length,
         failed,
+        skipped,
       },
     })
   } catch (err) {
