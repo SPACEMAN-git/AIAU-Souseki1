@@ -97,6 +97,26 @@
   font-size: 0.75rem;
 }
 
+.count {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.moreButton {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border: 1px solid #888;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.moreButton:hover {
+  border-color: #444;
+}
+
 .stationList {
   list-style: none;
   display: flex;

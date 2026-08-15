@@ -17,9 +17,12 @@ type Status =
   | {
     kind: "done";
     workplace: { name: string; lat: number; lng: number };
+    // 全件保持（後続の地図表示で使う）し、リストは visibleCount 件だけ描画する
     stations: ReachableStation[];
     mock: boolean;
   };
+
+const PAGE_SIZE = 30;
 
 export default function CommuteSearch() {
   const [address, setAddress] = useState("");
@@ -27,6 +30,7 @@ export default function CommuteSearch() {
   const [transitLimit, setTransitLimit] = useState("");
   const [validation, setValidation] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   function validate(): {
     address: string;
@@ -69,6 +73,7 @@ export default function CommuteSearch() {
       return;
     }
     setStatus({ kind: "loading" });
+    setVisibleCount(PAGE_SIZE);
     try {
       const geo = await geocode(input.address);
       const first = geo.data.results[0];
@@ -84,7 +89,9 @@ export default function CommuteSearch() {
       setStatus({
         kind: "done",
         workplace: { name: first.name, lat: first.lat, lng: first.lng },
-        stations: r.data.stations,
+        stations: [...r.data.stations].sort(
+          (a, b) => a.timeMinutes - b.timeMinutes,
+        ),
         mock: geo.mock || r.mock,
       });
     } catch (err) {
@@ -176,16 +183,32 @@ export default function CommuteSearch() {
               </p>
             )
             : (
-              <ul className={styles.stationList}>
-                {status.stations.map((s) => (
-                  <li key={s.id} className={styles.station}>
-                    <span className={styles.stationName}>{s.name}</span>
-                    <span className={styles.stationMeta}>
-                      {s.timeMinutes}分 ・ 乗換{s.transfers}回
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <p className={styles.count}>
+                  {status.stations.length}駅が見つかりました
+                  {status.stations.length > visibleCount &&
+                    `（通勤時間の短い順に上位 ${visibleCount} 駅を表示）`}
+                </p>
+                <ul className={styles.stationList}>
+                  {status.stations.slice(0, visibleCount).map((s) => (
+                    <li key={s.id} className={styles.station}>
+                      <span className={styles.stationName}>{s.name}</span>
+                      <span className={styles.stationMeta}>
+                        {s.timeMinutes}分 ・ 乗換{s.transfers}回
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {status.stations.length > visibleCount && (
+                  <button
+                    type="button"
+                    className={styles.moreButton}
+                    onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                  >
+                    もっと見る（残り {status.stations.length - visibleCount} 駅）
+                  </button>
+                )}
+              </>
             )}
         </div>
       )}
