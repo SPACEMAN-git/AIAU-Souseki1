@@ -1,5 +1,6 @@
 // RAPIDAPI_KEY なしでも動作確認できる mock レスポンス
 import type {
+  NormalizedAccessStations,
   NormalizedGeocode,
   NormalizedReachable,
   NormalizedReachableArea,
@@ -136,6 +137,56 @@ export function mockReachableArea(
     };
   });
   return { origin, term, mode, bicycleSpeed, boundary };
+}
+
+// mock の主要起点駅（勤務先から徒歩圈内の駅を徒歩分の短い順に返す）
+const MOCK_ACCESS_STATIONS = [
+  {
+    id: "00006668",
+    name: "東京",
+    lat: 35.681041,
+    lng: 139.767106,
+    walkMinutes: 3,
+    walkDistance: 240,
+  },
+  {
+    id: "00001165",
+    name: "大手町",
+    lat: 35.684606,
+    lng: 139.766246,
+    walkMinutes: 8,
+    walkDistance: 620,
+  },
+  {
+    id: "00002325",
+    name: "有楽町",
+    lat: 35.675069,
+    lng: 139.763328,
+    walkMinutes: 12,
+    walkDistance: 940,
+  },
+  {
+    id: "00004512",
+    name: "二重橋前",
+    lat: 35.679848,
+    lng: 139.762428,
+    walkMinutes: 17,
+    walkDistance: 1360,
+  },
+];
+
+export function mockAccessStations(
+  origin: { lat: number; lng: number },
+  walkLimit: number,
+  max: number,
+): NormalizedAccessStations {
+  return {
+    origin,
+    walkLimit,
+    stations: MOCK_ACCESS_STATIONS
+      .filter((s) => s.walkMinutes <= walkLimit)
+      .slice(0, max),
+  };
 }
 
 export function mockTransportCompany(id: string): NormalizedTransportCompany {

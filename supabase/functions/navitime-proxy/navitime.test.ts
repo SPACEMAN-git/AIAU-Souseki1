@@ -1,6 +1,8 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
   geocodeFromTransport,
+  haversineMeters,
+  nearestStationCandidates,
   normalizeGeocode,
   normalizeReachable,
   normalizeReachableArea,
@@ -10,6 +12,7 @@ import {
   normalizeTransportCompany,
 } from "./navitime.ts";
 import {
+  mockAccessStations,
   mockGeocode,
   mockReachable,
   mockRoute,
@@ -369,4 +372,80 @@ Deno.test("handler: reachable (mock=1) は transit_limit でも絞り込む", as
     body.data.stations.every((s: { transfers: number }) => s.transfers <= 1),
     true,
   );
+});
+
+Deno.test("haversineMeters: 東京駅〜大手町駅は約 400m", () => {
+  const d = haversineMeters(
+    { lat: 35.681236, lng: 139.767125 },
+    { lat: 35.684606, lng: 139.766246 },
+  );
+  assertEquals(d > 300 && d < 500, true);
+});
+
+Deno.test("nearestStationCandidates: 徒歩上限相当の直線距離で絞り近い順に返す", () => {
+  const origin = { lat: 35.681236, lng: 139.767125 };
+  const stations = [
+    {
+      id: "far",
+      name: "遠い駅",
+      lat: 35.7295,
+      lng: 139.7109,
+      timeMinutes: 21,
+      transfers: 1,
+    },
+    {
+      id: "mid",
+      name: "中間駅",
+      lat: 35.675069,
+      lng: 139.763328,
+      timeMinutes: 4,
+      transfers: 0,
+    },
+    {
+      id: "near",
+      name: "近い駅",
+      lat: 35.684606,
+      lng: 139.766246,
+      timeMinutes: 2,
+      transfers: 0,
+    },
+  ];
+  const picked = nearestStationCandidates(origin, stations, 15, 5);
+  assertEquals(picked.map((s) => s.id), ["near", "mid"]);
+  assertEquals(nearestStationCandidates(origin, stations, 15, 1).length, 1);
+});
+
+Deno.test("mockAccessStations: walk_limit と max を反映する", () => {
+  const origin = { lat: 35.681236, lng: 139.767125 };
+  const all = mockAccessStations(origin, 15, 3);
+  assertEquals(all.stations.map((s) => s.walkMinutes), [3, 8, 12]);
+  assertEquals(mockAccessStations(origin, 5, 3).stations.length, 1);
+  assertEquals(mockAccessStations(origin, 60, 2).stations.length, 2);
+});
+
+Deno.test("handler: access_stations (mock=1) は徒歩時間昇順で最大 max 件", async () => {
+  const res = await handleRequest(
+    new Request(
+      "http://local/x?action=access_stations&lat=35.681236&lng=139.767125&walk_limit=15&max=2&mock=1",
+    ),
+  );
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.ok, true);
+  assertEquals(body.data.walkLimit, 15);
+  assertEquals(
+    body.data.stations.map((s: { walkMinutes: number }) => s.walkMinutes),
+    [3, 8],
+  );
+});
+
+Deno.test("handler: access_stations は不正な walk_limit を 400 にする", async () => {
+  const res = await handleRequest(
+    new Request(
+      "http://local/x?action=access_stations&lat=35.681236&lng=139.767125&walk_limit=0&mock=1",
+    ),
+  );
+  assertEquals(res.status, 400);
+  const body = await res.json();
+  assertEquals(body.error.code, "bad_request");
 });

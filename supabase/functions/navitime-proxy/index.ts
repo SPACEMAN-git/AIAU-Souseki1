@@ -2,6 +2,9 @@
 // GET ?action=geocode&q=<住所 or 駅名（住所が 0 件なら駅名検索へフォールバック）>
 // GET ?action=reverse_geocode&lat=<lat>&lng=<lng>
 // GET ?action=reachable&lat=<lat>&lng=<lng>&term=<分, 1-180>[&transit_limit=<乗換回数上限, 0-30>]
+// GET ?action=access_stations&lat=<lat>&lng=<lng>[&walk_limit=<徒歩分上限, 1-60, 既定 15>][&max=<最大件数, 1-10, 既定 3>][&candidates=<徒歩経路を引く候補数, 1-10, 既定 5>]
+//   → 勤務先から実徒歩 walk_limit 分以内の鉄道駅を徒歩時間昇順で最大 max 件（地図の主要起点駅）
+//   ※ 通勤可達範囲の検索（action=reachable）の起点はこの駅でなく常に勤務先実坐標
 // GET ?action=reachable_area&lat=<lat>&lng=<lng>&term=<分, 1-180>&mode=<bicycle|walk>[&bicycle_speed=<km/h, 5-50>]
 // GET ?action=transport&q=<駅名>[&limit=<1-30>]
 // GET ?action=transport_company&id=<会社 ID>
@@ -9,10 +12,11 @@
 // 共通: &mock=1 で mock レスポンス（RAPIDAPI_KEY 未設定時も自動で mock にフォールバック）
 //
 // レスポンス（normalized）:
-//   { ok: true,  action, mock: boolean, data: Normalized(Geocode|ReverseGeocode|Reachable|ReachableArea|Transport|TransportCompany|Route) }
+//   { ok: true,  action, mock: boolean, data: Normalized(Geocode|ReverseGeocode|Reachable|AccessStations|ReachableArea|Transport|TransportCompany|Route) }
 //   { ok: false, error: { code, message } }
 
 import {
+  fetchAccessStations,
   fetchGeocode,
   fetchReachable,
   fetchReachableArea,
@@ -22,6 +26,7 @@ import {
   fetchTransportNode,
 } from "./navitime.ts";
 import {
+  mockAccessStations,
   mockGeocode,
   mockReachable,
   mockReachableArea,
@@ -123,6 +128,49 @@ export async function handleRequest(req: Request): Promise<Response> {
         const data = useMock
           ? mockReachable(origin, term, transitLimit)
           : await fetchReachable(origin, term, transitLimit, apiKey!);
+        return json({ ok: true, action, mock: useMock, data });
+      }
+      case "access_stations": {
+        const lat = Number(url.searchParams.get("lat"));
+        const lng = Number(url.searchParams.get("lng"));
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return errorResponse("bad_request", "lat/lng must be numbers", 400);
+        }
+        const intParam = (
+          name: string,
+          fallback: number,
+          min: number,
+          max: number,
+        ): number | Response => {
+          const raw = url.searchParams.get(name);
+          if (raw === null || raw === "") return fallback;
+          const n = Number(raw);
+          if (!Number.isInteger(n) || n < min || n > max) {
+            return errorResponse(
+              "bad_request",
+              `${name} must be an integer between ${min} and ${max}`,
+              400,
+            );
+          }
+          return n;
+        };
+        const walkLimit = intParam("walk_limit", 15, 1, 60);
+        if (walkLimit instanceof Response) return walkLimit;
+        const max = intParam("max", 3, 1, 10);
+        if (max instanceof Response) return max;
+        const candidates = intParam("candidates", 5, 1, 10);
+        if (candidates instanceof Response) return candidates;
+        const origin = { lat, lng };
+        const data = useMock
+          ? mockAccessStations(origin, walkLimit, max)
+          : await fetchAccessStations(
+            origin,
+            walkLimit,
+            max,
+            candidates,
+            defaultStartTime(),
+            apiKey!,
+          );
         return json({ ok: true, action, mock: useMock, data });
       }
       case "reachable_area": {
@@ -232,7 +280,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       default:
         return errorResponse(
           "bad_request",
-          "action must be one of: geocode, reverse_geocode, reachable, reachable_area, transport, transport_company, route",
+          "action must be one of: geocode, reverse_geocode, reachable, access_stations, reachable_area, transport, transport_company, route",
           400,
         );
     }

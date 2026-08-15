@@ -91,6 +91,22 @@ export interface RouteCandidate {
   sections: RouteSection[];
 }
 
+// 勤務先から徒歩で行ける「主要起点駅」。通勤可達検索の起点には使わない（起点は常に勤務先座標）。
+export interface AccessStation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  walkMinutes: number;
+  walkDistance: number;
+}
+
+export interface NormalizedAccessStations {
+  origin: { lat: number; lng: number };
+  walkLimit: number;
+  stations: AccessStation[];
+}
+
 export interface NormalizedRoute {
   origin: { lat: number; lng: number };
   destination: { lat: number; lng: number };
@@ -466,4 +482,113 @@ export async function fetchRoute(
     start_time: startTime,
   }, apiKey) as RawItemsResponse<RawRouteItem>;
   return normalizeRoute(origin, destination, startTime, raw);
+}
+
+// totalnavi に徒歩専用エンドポイントは無いため、route_transit で全交通機関を除外して
+// 徒歩のみの経路を引く（unuse に使える値は API 側で限定されている）。
+const WALK_ONLY_UNUSE = [
+  "local_train",
+  "rapid_train",
+  "express_train",
+  "sleeper_ultraexpress",
+  "superexpress_train",
+  "local_bus",
+  "highway_bus",
+  "shuttle_bus",
+  "ferry",
+  "domestic_flight",
+].join(".");
+
+export async function fetchWalkRoute(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  startTime: string,
+  apiKey: string,
+): Promise<{ minutes: number; distance: number } | null> {
+  const raw = await rapidApiGet(ROUTE_HOST, "/route_transit", {
+    start: `${origin.lat},${origin.lng}`,
+    goal: `${destination.lat},${destination.lng}`,
+    start_time: startTime,
+    coord_unit: "degree",
+    datum: "wgs84",
+    limit: "1",
+    unuse: WALK_ONLY_UNUSE,
+  }, apiKey) as RawItemsResponse<RawRouteItem>;
+  const [first] = normalizeRoute(origin, destination, startTime, raw).routes;
+  if (!first) return null;
+  return { minutes: first.totalMinutes, distance: first.walkDistance };
+}
+
+// 徒歩速度 80m/分 相当で「上限分数なら最大でもこの直線距離」を求め、実経路を引く候補を絞る。
+const WALK_METERS_PER_MINUTE = 80;
+
+export function haversineMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// 直線距離で候補を絞ったうえで、NAVITIME の徒歩経路で実際の所要時間を確認する。
+export function nearestStationCandidates(
+  origin: { lat: number; lng: number },
+  stations: ReachableStation[],
+  walkLimit: number,
+  candidates: number,
+): ReachableStation[] {
+  const radius = walkLimit * WALK_METERS_PER_MINUTE;
+  return stations
+    .filter((s) => haversineMeters(origin, s) <= radius)
+    .sort((a, b) => haversineMeters(origin, a) - haversineMeters(origin, b))
+    .slice(0, candidates);
+}
+
+export async function fetchAccessStations(
+  origin: { lat: number; lng: number },
+  walkLimit: number,
+  max: number,
+  candidates: number,
+  startTime: string,
+  apiKey: string,
+): Promise<NormalizedAccessStations> {
+  // 勤務先周辺の駅一覧は reachable_transit（node_type=station）から取り、直線距離で絞る。
+  const reachable = await fetchReachable(origin, walkLimit, null, apiKey);
+  const nearby = nearestStationCandidates(
+    origin,
+    reachable.stations,
+    walkLimit,
+    candidates,
+  );
+
+  const walks = await Promise.all(
+    nearby.map((station) =>
+      fetchWalkRoute(origin, station, startTime, apiKey)
+        .then((walk) => ({ station, walk }))
+    ),
+  );
+
+  const walked: AccessStation[] = walks
+    .filter(({ walk }) => walk !== null && walk.minutes <= walkLimit)
+    .map(({ station, walk }) => ({
+      id: station.id,
+      name: station.name,
+      lat: station.lat,
+      lng: station.lng,
+      walkMinutes: walk!.minutes,
+      walkDistance: walk!.distance,
+    }));
+
+  return {
+    origin,
+    walkLimit,
+    stations: walked
+      .sort((a, b) => a.walkMinutes - b.walkMinutes)
+      .slice(0, max),
+  };
 }
