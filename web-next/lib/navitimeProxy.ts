@@ -15,6 +15,22 @@ export interface ReachableStation {
   transfers: number;
 }
 
+// 勤務先から実徒歩で行ける「主要起点駅」。通勤可達検索の起点は常に勤務先座標のままで、この駅では絞り込まない。
+export interface AccessStation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  walkMinutes: number;
+  walkDistance: number;
+}
+
+export interface NormalizedAccessStations {
+  origin: { lat: number; lng: number };
+  walkLimit: number;
+  stations: AccessStation[];
+}
+
 export interface NormalizedGeocode {
   query: string;
   // 住所検索で 0 件のとき Edge Function が駅名検索にフォールバックする
@@ -109,4 +125,18 @@ export function reachable(
   };
   if (transitLimit !== null) params.transit_limit = String(transitLimit);
   return callProxy<NormalizedReachable>(params);
+}
+
+export function accessStations(
+  origin: { lat: number; lng: number },
+  walkLimit = 15,
+  max = 3,
+): Promise<ProxyResult<NormalizedAccessStations>> {
+  return callProxy<NormalizedAccessStations>({
+    action: "access_stations",
+    lat: String(origin.lat),
+    lng: String(origin.lng),
+    walk_limit: String(walkLimit),
+    max: String(max),
+  });
 }

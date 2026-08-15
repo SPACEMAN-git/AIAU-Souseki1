@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { ReachableStation } from "../lib/navitimeProxy";
+import type { AccessStation, ReachableStation } from "../lib/navitimeProxy";
 import styles from "./CommuteMap.module.css";
 
 // 国土地理院の淡色地図（公開タイル）。web/ の Vite 前端と同じ底図を使う。
@@ -20,6 +20,8 @@ export interface MapView {
 export interface CommuteMapProps {
   workplace: { name: string; lat: number; lng: number } | null;
   stations: ReachableStation[];
+  /** 勤務先から徒歩圏内の主要起点駅（最大 3 駅）。候補駅の絞り込みには使わない */
+  accessStations: AccessStation[];
   /** 通勤時間の上限。marker の強弱付けに使う */
   term: number;
   /** リストから選ばれた駅へ寄る（同じ駅を再度押しても反応するよう seq を持つ） */
@@ -51,16 +53,38 @@ function stationLevel(timeMinutes: number, term: number): 1 | 2 | 3 {
   return 3;
 }
 
-function stationPopupContent(station: ReachableStation): HTMLElement {
+function stationPopupContent(
+  station: ReachableStation,
+  access: AccessStation | undefined,
+): HTMLElement {
   const el = document.createElement("div");
   el.className = styles.popup;
   const name = document.createElement("strong");
-  name.textContent = station.name;
+  name.textContent = access ? `◉ ${station.name}` : station.name;
   const time = document.createElement("div");
   time.textContent = `通勤時間：${station.timeMinutes}分`;
   const transfers = document.createElement("div");
   transfers.textContent = `乗換：${station.transfers}回`;
   el.append(name, time, transfers);
+  if (access) {
+    const walk = document.createElement("div");
+    walk.textContent =
+      `主要起点駅・勤務先から徒歩${access.walkMinutes}分（${access.walkDistance}m）`;
+    el.append(walk);
+  }
+  return el;
+}
+
+// 候補駅リストに含まれない主要起点駅（通勤条件で外れた場合）用の popup
+function accessOnlyPopupContent(access: AccessStation): HTMLElement {
+  const el = document.createElement("div");
+  el.className = styles.popup;
+  const name = document.createElement("strong");
+  name.textContent = `◉ ${access.name}`;
+  const walk = document.createElement("div");
+  walk.textContent =
+    `主要起点駅・勤務先から徒歩${access.walkMinutes}分（${access.walkDistance}m）`;
+  el.append(name, walk);
   return el;
 }
 
@@ -76,7 +100,8 @@ function workplacePopupContent(name: string): HTMLElement {
 }
 
 export default function CommuteMap(
-  { workplace, stations, term, focus, onViewChange }: CommuteMapProps,
+  { workplace, stations, accessStations, term, focus, onViewChange }:
+    CommuteMapProps,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -146,26 +171,53 @@ export default function CommuteMap(
     stationMarkersRef.current.forEach((marker) => marker.remove());
     stationMarkersRef.current.clear();
 
+    const accessById = new Map(accessStations.map((s) => [s.id, s]));
+
     for (const station of stations) {
       if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) {
         continue;
       }
+      const access = accessById.get(station.id);
       const el = document.createElement("div");
-      el.className = `${styles.stationMarker} ${
-        styles[`level${stationLevel(station.timeMinutes, term)}`]
-      }`;
-      el.title = `${station.name} ${station.timeMinutes}分`;
+      el.className = access
+        ? `${styles.stationMarker} ${styles.accessMarker}`
+        : `${styles.stationMarker} ${
+          styles[`level${stationLevel(station.timeMinutes, term)}`]
+        }`;
+      if (access) el.textContent = "◉";
+      el.title = access
+        ? `${station.name}（主要起点駅・徒歩${access.walkMinutes}分）`
+        : `${station.name} ${station.timeMinutes}分`;
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([station.lng, station.lat])
         .setPopup(
           new maplibregl.Popup({ offset: 12 }).setDOMContent(
-            stationPopupContent(station),
+            stationPopupContent(station, access),
           ),
         )
         .addTo(map);
       stationMarkersRef.current.set(station.id, marker);
     }
-  }, [stations, term]);
+
+    // 通勤条件で候補駅から外れた主要起点駅も、地図上には起点として残す
+    for (const access of accessStations) {
+      if (stationMarkersRef.current.has(access.id)) continue;
+      if (!Number.isFinite(access.lat) || !Number.isFinite(access.lng)) continue;
+      const el = document.createElement("div");
+      el.className = `${styles.stationMarker} ${styles.accessMarker}`;
+      el.textContent = "◉";
+      el.title = `${access.name}（主要起点駅・徒歩${access.walkMinutes}分）`;
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([access.lng, access.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 12 }).setDOMContent(
+            accessOnlyPopupContent(access),
+          ),
+        )
+        .addTo(map);
+      stationMarkersRef.current.set(access.id, marker);
+    }
+  }, [stations, accessStations, term]);
 
   // 検索成功後は勤務先と候補駅すべてが入る範囲へ移動する
   useEffect(() => {

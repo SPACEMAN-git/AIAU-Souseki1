@@ -3,6 +3,8 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import {
+  type AccessStation,
+  accessStations as fetchAccessStations,
   geocode,
   proxyConfigured,
   reachable,
@@ -23,10 +25,14 @@ type Status =
     workplace: { name: string; lat: number; lng: number };
     // 全件保持（後続の地図表示で使う）し、リストは visibleCount 件だけ描画する
     stations: ReachableStation[];
+    // 勤務先から実徒歩 15 分以内の主要起点駅（最大 3 駅）。stations の絞り込みには使わない
+    accessStations: AccessStation[];
     mock: boolean;
   };
 
 const PAGE_SIZE = 30;
+const ACCESS_WALK_LIMIT = 15;
+const ACCESS_MAX = 3;
 
 export default function CommuteSearch() {
   const [address, setAddress] = useState("");
@@ -89,17 +95,20 @@ export default function CommuteSearch() {
         setStatus({ kind: "no_address" });
         return;
       }
-      const r = await reachable(
-        { lat: first.lat, lng: first.lng },
-        input.term,
-        input.transitLimit,
-      );
+      const origin = { lat: first.lat, lng: first.lng };
+      // 通勤可達範囲の起点は常に勤務先の実坐標。主要起点駅は地図表示用に並行で取得する。
+      const [r, access] = await Promise.all([
+        reachable(origin, input.term, input.transitLimit),
+        fetchAccessStations(origin, ACCESS_WALK_LIMIT, ACCESS_MAX)
+          .catch(() => null),
+      ]);
       setStatus({
         kind: "done",
         workplace: { name: first.name, lat: first.lat, lng: first.lng },
         stations: [...r.data.stations].sort(
           (a, b) => a.timeMinutes - b.timeMinutes,
         ),
+        accessStations: access?.data.stations ?? [],
         mock: geo.mock || r.mock,
       });
     } catch (err) {
@@ -189,6 +198,42 @@ export default function CommuteSearch() {
                   <span className={styles.badge}>モックデータ</span>
                 )}
               </p>
+              <div className={styles.accessBlock}>
+                <p className={styles.accessTitle}>
+                  主要起点駅（勤務先から徒歩{ACCESS_WALK_LIMIT}分以内・最大{" "}
+                  {ACCESS_MAX} 駅）
+                </p>
+                {status.accessStations.length === 0
+                  ? (
+                    <p className={styles.info}>
+                      徒歩{ACCESS_WALK_LIMIT}分以内の鉄道駅は見つかりませんでした。
+                    </p>
+                  )
+                  : (
+                    <ul className={styles.stationList}>
+                      {status.accessStations.map((s) => (
+                        <li key={`access-${s.id}`}>
+                          <button
+                            type="button"
+                            className={`${styles.station} ${styles.accessStation}`}
+                            onClick={() =>
+                              setFocus((prev) => ({
+                                stationId: s.id,
+                                seq: (prev?.seq ?? 0) + 1,
+                              }))}
+                          >
+                            <span className={styles.stationName}>
+                              ◉ {s.name}
+                            </span>
+                            <span className={styles.stationMeta}>
+                              徒歩{s.walkMinutes}分 ・ {s.walkDistance}m
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+              </div>
               {status.stations.length === 0
                 ? (
                   <p className={styles.info}>
@@ -243,6 +288,9 @@ export default function CommuteSearch() {
           <CommuteMap
             workplace={status.kind === "done" ? status.workplace : null}
             stations={status.kind === "done" ? status.stations : []}
+            accessStations={status.kind === "done"
+              ? status.accessStations
+              : []}
             term={Number(term) || 30}
             focus={focus}
           />

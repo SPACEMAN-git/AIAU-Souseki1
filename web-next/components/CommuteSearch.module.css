@@ -126,6 +126,23 @@
   font-size: 0.75rem;
 }
 
+.accessBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.accessTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.accessStation {
+  border-color: #0f9d58;
+}
+
 .count {
   font-size: 0.95rem;
   font-weight: 600;
