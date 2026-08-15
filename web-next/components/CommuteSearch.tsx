@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   accessStations as fetchAccessStations,
@@ -17,6 +17,9 @@ import {
   type RailwayLine,
 } from "../lib/railwayCache";
 import type { SearchStatus, ValidationError } from "../lib/searchState";
+import useViewportListings from "../lib/useViewportListings";
+import type { ListingBounds } from "../lib/listings";
+import type { MapView } from "./CommuteMap";
 import LeftRail, { type RailTab } from "./LeftRail";
 import SearchBar from "./SearchBar";
 import styles from "./CommuteSearch.module.css";
@@ -58,6 +61,17 @@ export default function CommuteSearch() {
   const [selectedLine, setSelectedLine] = useState<RailwayLine | null>(null);
   const [lineLoadingId, setLineLoadingId] = useState<string | null>(null);
   const [lineError, setLineError] = useState<string | null>(null);
+  // 地図の現在の表示範囲。moveend のたびに更新し、この範囲の物件を引く
+  const [viewBounds, setViewBounds] = useState<ListingBounds | null>(null);
+
+  const onViewChange = useCallback((view: MapView) => {
+    setViewBounds(view.bounds);
+  }, []);
+
+  const properties = useViewportListings(
+    viewBounds,
+    status.kind === "done",
+  );
 
   // 路線切り替えでは reachable 検索を再実行せず、geometry だけを取得（同一路線は cache）
   async function onSelectLine(lineId: string, officialColor: string | null) {
@@ -241,6 +255,9 @@ export default function CommuteSearch() {
             selectedLine={selectedLine}
             onClearLine={() => setSelectedLine(null)}
             loading={status.kind === "loading"}
+            properties={properties.properties}
+            propertiesLoading={properties.loading}
+            onViewChange={onViewChange}
           />
         </div>
       </div>

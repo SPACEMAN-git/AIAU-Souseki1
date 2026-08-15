@@ -9,7 +9,8 @@ import { StationMarkerRegistry } from "../lib/markerRegistry";
 import RailwayLayer from "./RailwayLayer";
 import CandidateStationLayer from "./CandidateStationLayer";
 import PrimaryStationLayer from "./PrimaryStationLayer";
-import PropertyLayer, { type PropertyMarkerData } from "./PropertyLayer";
+import PropertyLayer from "./PropertyLayer";
+import type { PropertyListing } from "../lib/listings";
 import WorkplaceLayer from "./WorkplaceLayer";
 import styles from "./CommuteMap.module.css";
 
@@ -39,9 +40,13 @@ export interface CommuteMapProps {
   onClearLine?: () => void;
   /** 検索中は地図を軽く伏せる（marker は前回のまま残す） */
   loading?: boolean;
-  /** Task 6: Supabase の listings をそのまま渡す。未指定なら物件 marker は出ない */
-  properties?: PropertyMarkerData[];
-  /** Task 6（物件の動的読み込み）用: 地図移動後に現在の中心と bounds を通知する */
+  /** viewport 内の物件（Supabase listings）。未指定なら物件 marker は出ない */
+  properties?: PropertyListing[];
+  /** 物件 popup の Door-to-Door CTA（Task 7 で経路計算に繋ぐ） */
+  onRequestCommute?: (property: PropertyListing) => void;
+  /** 物件取得中はカウンタを控えめに出す */
+  propertiesLoading?: boolean;
+  /** 地図移動後に現在の中心と bounds を通知する（物件の動的読み込み用） */
   onViewChange?: (view: MapView) => void;
 }
 
@@ -71,6 +76,8 @@ export default function CommuteMap(
     onClearLine,
     loading,
     properties,
+    onRequestCommute,
+    propertiesLoading,
     onViewChange,
   }: CommuteMapProps,
 ) {
@@ -101,6 +108,8 @@ export default function CommuteMap(
       zoom: 10,
     });
     map.on("moveend", () => onViewChangeRef.current?.(toMapView(map)));
+    // fitBounds を待たず初期 viewport でも一度通知する
+    map.once("load", () => onViewChangeRef.current?.(toMapView(map)));
     mapRef.current = map;
     setMap(map);
 
@@ -173,7 +182,11 @@ export default function CommuteMap(
         stations={stations}
         registry={registryRef.current}
       />
-      <PropertyLayer map={map} properties={propertyMarkers} />
+      <PropertyLayer
+        map={map}
+        properties={propertyMarkers}
+        onRequestCommute={onRequestCommute}
+      />
       <WorkplaceLayer map={map} workplace={workplace} />
 
       <div className={styles.controls}>
@@ -218,6 +231,12 @@ export default function CommuteMap(
           ⤢
         </button>
       </div>
+
+      {workplace && (
+        <div className={styles.areaCount}>
+          このエリアの物件：{propertiesLoading ? "…" : `${propertyMarkers.length}件`}
+        </div>
+      )}
 
       <div className={styles.legend}>
         <span className={styles.legendItem}>
