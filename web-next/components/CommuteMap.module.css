@@ -46,6 +46,21 @@
   color: var(--text-3);
 }
 
+/* 現在の viewport で取得できた物件件数 */
+.areaCount {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: var(--shadow-1);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .legend {
   position: absolute;
   bottom: var(--space-4);

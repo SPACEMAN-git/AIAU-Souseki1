@@ -123,7 +123,7 @@
   pointer-events: none;
 }
 
-/* 物件 marker（Task 6 で Supabase の listings を渡す。現状は空） */
+/* 物件 marker（Supabase listings を viewport で取得したもの） */
 .property {
   position: relative;
   z-index: 3;
@@ -161,8 +161,57 @@
   opacity: 1 !important;
 }
 
+.property:hover {
+  z-index: 6;
+  background: #6d28d9;
+}
+
 .popup {
   color: var(--text-1);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.popupTitle {
+  font-weight: 700;
+}
+
+.popupRent {
+  margin: 2px 0 6px;
+  color: #6d28d9;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.popupRow {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.popupKey {
+  color: var(--text-2);
+}
+
+.popupCta {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.popupCta:hover {
+  background: #6d28d9;
+}
+
+.popupNote {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 11px;
 }
