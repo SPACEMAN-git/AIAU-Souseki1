@@ -133,6 +133,7 @@ export function MapView() {
       attributionControl: { compact: false },
     })
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    map.on('error', (e) => console.error('maplibre', e.error?.message ?? e))
     popupRef.current = new maplibregl.Popup({
       closeButton: false,
       offset: 12,
