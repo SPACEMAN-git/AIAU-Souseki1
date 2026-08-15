@@ -1,6 +1,6 @@
 // navitime-proxy Edge Function
 // GET ?action=geocode&q=<住所>
-// GET ?action=reachable&lat=<lat>&lng=<lng>&term=<分, 1-180>
+// GET ?action=reachable&lat=<lat>&lng=<lng>&term=<分, 1-180>[&transit_limit=<乗換回数上限, 0-30>]
 // 共通: &mock=1 で mock レスポンス（RAPIDAPI_KEY 未設定時も自動で mock にフォールバック）
 //
 // レスポンス（normalized）:
@@ -63,10 +63,23 @@ export async function handleRequest(req: Request): Promise<Response> {
             400,
           );
         }
+        const transitLimitRaw = url.searchParams.get("transit_limit");
+        let transitLimit: number | null = null;
+        if (transitLimitRaw !== null && transitLimitRaw !== "") {
+          const n = Number(transitLimitRaw);
+          if (!Number.isInteger(n) || n < 0 || n > 30) {
+            return errorResponse(
+              "bad_request",
+              "transit_limit must be an integer between 0 and 30",
+              400,
+            );
+          }
+          transitLimit = n;
+        }
         const origin = { lat, lng };
         const data = useMock
-          ? mockReachable(origin, term)
-          : await fetchReachable(origin, term, apiKey!);
+          ? mockReachable(origin, term, transitLimit)
+          : await fetchReachable(origin, term, transitLimit, apiKey!);
         return json({ ok: true, action, mock: useMock, data });
       }
       default:

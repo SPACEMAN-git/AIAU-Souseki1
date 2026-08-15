@@ -13,6 +13,7 @@ export interface ReachableStation {
   lat: number;
   lng: number;
   timeMinutes: number;
+  transfers: number;
 }
 
 export interface NormalizedGeocode {
@@ -23,6 +24,7 @@ export interface NormalizedGeocode {
 export interface NormalizedReachable {
   origin: { lat: number; lng: number };
   term: number;
+  transitLimit: number | null;
   stations: ReachableStation[];
 }
 
@@ -48,6 +50,7 @@ interface RawReachableItem {
   name?: string;
   coord?: RawCoord;
   time?: number;
+  transit_count?: number;
 }
 
 interface RawItemsResponse<T> {
@@ -73,6 +76,7 @@ export function normalizeGeocode(
 export function normalizeReachable(
   origin: { lat: number; lng: number },
   term: number,
+  transitLimit: number | null,
   raw: RawItemsResponse<RawReachableItem>,
 ): NormalizedReachable {
   const stations: ReachableStation[] = (raw.items ?? [])
@@ -85,9 +89,10 @@ export function normalizeReachable(
       lat: it.coord!.lat!,
       lng: it.coord!.lon!,
       timeMinutes: typeof it.time === "number" ? it.time : term,
+      transfers: typeof it.transit_count === "number" ? it.transit_count : 0,
     }))
     .sort((a, b) => a.timeMinutes - b.timeMinutes);
-  return { origin, term, stations };
+  return { origin, term, transitLimit, stations };
 }
 
 async function rapidApiGet(
@@ -127,14 +132,22 @@ export async function fetchGeocode(
 export async function fetchReachable(
   origin: { lat: number; lng: number },
   term: number,
+  transitLimit: number | null,
   apiKey: string,
 ): Promise<NormalizedReachable> {
-  const raw = await rapidApiGet(REACHABLE_HOST, "/reachable_transit", {
+  const params: Record<string, string> = {
     start: `${origin.lat},${origin.lng}`,
     term: String(term),
     limit: "200",
     // 電車駅に絞る（バス停は除外）。実キーでの結合テスト時に調整する。
     node_type: "station",
-  }, apiKey) as RawItemsResponse<RawReachableItem>;
-  return normalizeReachable(origin, term, raw);
+  };
+  if (transitLimit !== null) params.transit_limit = String(transitLimit);
+  const raw = await rapidApiGet(
+    REACHABLE_HOST,
+    "/reachable_transit",
+    params,
+    apiKey,
+  ) as RawItemsResponse<RawReachableItem>;
+  return normalizeReachable(origin, term, transitLimit, raw);
 }

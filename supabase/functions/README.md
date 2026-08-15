@@ -9,7 +9,7 @@ NAVITIME（RapidAPI）の唯一の呼び出し口。RapidAPI key はこの関数
 | Action | リクエスト | 返却 data |
 |---|---|---|
 | geocode | `GET ?action=geocode&q=<住所>` | `{ query, results: [{ name, lat, lng }] }` |
-| reachable | `GET ?action=reachable&lat=<lat>&lng=<lng>&term=<1-180>` | `{ origin, term, stations: [{ id, name, lat, lng, timeMinutes }] }`（time 昇順） |
+| reachable | `GET ?action=reachable&lat=<lat>&lng=<lng>&term=<1-180>[&transit_limit=<0-30>]` | `{ origin, term, transitLimit, stations: [{ id, name, lat, lng, timeMinutes, transfers }] }`（time 昇順） |
 
 共通レスポンス: `{ ok: true, action, mock, data }` / `{ ok: false, error: { code, message } }`
 
