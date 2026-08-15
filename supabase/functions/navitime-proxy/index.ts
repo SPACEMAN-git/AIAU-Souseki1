@@ -5,6 +5,10 @@
 // GET ?action=access_stations&lat=<lat>&lng=<lng>[&walk_limit=<徒歩分上限, 1-60, 既定 15>][&max=<最大件数, 1-10, 既定 3>][&candidates=<徒歩経路を引く候補数, 1-10, 既定 5>]
 //   → 勤務先から実徒歩 walk_limit 分以内の鉄道駅を徒歩時間昇順で最大 max 件（地図の主要起点駅）
 //   ※ 通勤可達範囲の検索（action=reachable）の起点はこの駅でなく常に勤務先実坐標
+// GET ?action=station_lines&ids=<駅ノード ID をカンマ区切り, 最大 5>
+//   → 各駅が属する鉄道路線（lineId / lineName / operator / 公式色）
+// GET ?action=railway_geometry&line_id=<路線 ID>
+//   → その路線の実 GeoJSON MultiLineString（route_transit の shape、駅座標の直線結びではない）
 // GET ?action=reachable_area&lat=<lat>&lng=<lng>&term=<分, 1-180>&mode=<bicycle|walk>[&bicycle_speed=<km/h, 5-50>]
 // GET ?action=transport&q=<駅名>[&limit=<1-30>]
 // GET ?action=transport_company&id=<会社 ID>
@@ -18,20 +22,24 @@
 import {
   fetchAccessStations,
   fetchGeocode,
+  fetchRailwayGeometry,
   fetchReachable,
   fetchReachableArea,
   fetchReverseGeocode,
   fetchRoute,
+  fetchStationLines,
   fetchTransportCompany,
   fetchTransportNode,
 } from "./navitime.ts";
 import {
   mockAccessStations,
   mockGeocode,
+  mockRailwayGeometry,
   mockReachable,
   mockReachableArea,
   mockReverseGeocode,
   mockRoute,
+  mockStationLines,
   mockTransport,
   mockTransportCompany,
 } from "./mock.ts";
@@ -173,6 +181,32 @@ export async function handleRequest(req: Request): Promise<Response> {
           );
         return json({ ok: true, action, mock: useMock, data });
       }
+      case "station_lines": {
+        const ids = (url.searchParams.get("ids") ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s !== "");
+        if (ids.length === 0) {
+          return errorResponse("bad_request", "ids is required", 400);
+        }
+        if (ids.length > 5) {
+          return errorResponse("bad_request", "ids must be 5 or fewer", 400);
+        }
+        const data = useMock
+          ? mockStationLines(ids)
+          : await fetchStationLines(ids, apiKey!);
+        return json({ ok: true, action, mock: useMock, data });
+      }
+      case "railway_geometry": {
+        const lineId = url.searchParams.get("line_id")?.trim();
+        if (!lineId) {
+          return errorResponse("bad_request", "line_id is required", 400);
+        }
+        const data = useMock
+          ? mockRailwayGeometry(lineId)
+          : await fetchRailwayGeometry(lineId, defaultStartTime(), apiKey!);
+        return json({ ok: true, action, mock: useMock, data });
+      }
       case "reachable_area": {
         const lat = Number(url.searchParams.get("lat"));
         const lng = Number(url.searchParams.get("lng"));
@@ -280,7 +314,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       default:
         return errorResponse(
           "bad_request",
-          "action must be one of: geocode, reverse_geocode, reachable, access_stations, reachable_area, transport, transport_company, route",
+          "action must be one of: geocode, reverse_geocode, reachable, access_stations, station_lines, railway_geometry, reachable_area, transport, transport_company, route",
           400,
         );
     }

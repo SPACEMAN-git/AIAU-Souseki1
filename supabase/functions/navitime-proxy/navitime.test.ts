@@ -8,8 +8,10 @@ import {
   normalizeReachableArea,
   normalizeReverseGeocode,
   normalizeRoute,
+  normalizeStationLines,
   normalizeTransport,
   normalizeTransportCompany,
+  viaIndexes,
 } from "./navitime.ts";
 import {
   mockAccessStations,
@@ -448,4 +450,86 @@ Deno.test("handler: access_stations は不正な walk_limit を 400 にする", 
   assertEquals(res.status, 400);
   const body = await res.json();
   assertEquals(body.error.code, "bad_request");
+});
+
+Deno.test("normalizeStationLines: details から路線を重複排除して取り出す", () => {
+  const normalized = normalizeStationLines({
+    items: [
+      {
+        id: "00006668",
+        name: "東京",
+        details: [
+          {
+            company: { id: "00000004", name: "ＪＲ東日本" },
+            link: { id: "00000123", name: "ＪＲ横須賀線", color: "#007AC0" },
+          },
+          {
+            company: { id: "00000004", name: "ＪＲ東日本" },
+            link: { id: "00000123", name: "ＪＲ横須賀線", color: "#007AC0" },
+          },
+          {
+            company: { id: "00000113", name: "東京地下鉄（メトロ）" },
+            link: {
+              id: "00000766",
+              name: "東京メトロ丸ノ内線",
+              color: "#F62E36",
+            },
+          },
+          { company: { id: "00000004", name: "ＪＲ東日本" } },
+        ],
+      },
+    ],
+  });
+  assertEquals(normalized.stations.length, 1);
+  const station = normalized.stations[0];
+  assertEquals(station.stationId, "00006668");
+  assertEquals(station.lines.map((l) => l.lineId), ["00000123", "00000766"]);
+  assertEquals(station.lines[1].operator, "東京地下鉄（メトロ）");
+  assertEquals(station.lines[1].color, "#F62E36");
+});
+
+Deno.test("viaIndexes: 端点を含まない等間隔の経由地を返す", () => {
+  assertEquals(viaIndexes(0, 24, 3), [6, 12, 18]);
+  assertEquals(viaIndexes(0, 1, 3), []);
+  assertEquals(viaIndexes(0, 2, 1), [1]);
+});
+
+Deno.test("handler: station_lines (mock=1) は駅ごとの路線を返す", async () => {
+  const res = await handleRequest(
+    new Request(
+      "http://local/x?action=station_lines&ids=00006668,00001878&mock=1",
+    ),
+  );
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.ok, true);
+  assertEquals(body.data.stations.length, 2);
+  assertEquals(body.data.stations[0].lines.length, 2);
+});
+
+Deno.test("handler: station_lines は ids 未指定を 400 にする", async () => {
+  const res = await handleRequest(
+    new Request("http://local/x?action=station_lines&mock=1"),
+  );
+  assertEquals(res.status, 400);
+});
+
+Deno.test("handler: railway_geometry (mock=1) は MultiLineString を返す", async () => {
+  const res = await handleRequest(
+    new Request(
+      "http://local/x?action=railway_geometry&line_id=00000766&mock=1",
+    ),
+  );
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.data.geometry.type, "MultiLineString");
+  assertEquals(body.data.geometry.coordinates.length, 2);
+  assertEquals(body.data.color, "#F62E36");
+});
+
+Deno.test("handler: railway_geometry は line_id 未指定を 400 にする", async () => {
+  const res = await handleRequest(
+    new Request("http://local/x?action=railway_geometry&mock=1"),
+  );
+  assertEquals(res.status, 400);
 });

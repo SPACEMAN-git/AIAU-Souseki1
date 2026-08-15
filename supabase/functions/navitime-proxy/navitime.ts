@@ -107,6 +107,35 @@ export interface NormalizedAccessStations {
   stations: AccessStation[];
 }
 
+// 駅が属する鉄道路線（transport_node/id?options=detail の details[].link）
+export interface StationLine {
+  lineId: string;
+  lineName: string;
+  operator: string | null;
+  color: string | null;
+}
+
+export interface StationWithLines {
+  stationId: string;
+  stationName: string;
+  lines: StationLine[];
+}
+
+export interface NormalizedStationLines {
+  stations: StationWithLines[];
+}
+
+// 選択された 1 路線の実 GeoJSON（駅座標の直線結びではなく route_transit の shape）
+export interface NormalizedRailwayGeometry {
+  lineId: string;
+  lineName: string;
+  operator: string | null;
+  color: string | null;
+  geometry: { type: "MultiLineString"; coordinates: number[][][] };
+  stationIds: string[];
+  requestCount: number;
+}
+
 export interface NormalizedRoute {
   origin: { lat: number; lng: number };
   destination: { lat: number; lng: number };
@@ -183,6 +212,46 @@ interface RawRouteItem {
 
 interface RawItemsResponse<T> {
   items?: T[];
+}
+
+interface RawStationDetail {
+  company?: RawCompanyItem;
+  link?: { id?: string | number; name?: string; color?: string };
+}
+
+interface RawStationDetailItem {
+  id?: string | number;
+  name?: string;
+  details?: RawStationDetail[];
+}
+
+interface RawLineNode {
+  id?: string | number;
+  name?: string;
+  coord?: RawCoord;
+}
+
+interface RawLineItem {
+  id?: string | number;
+  name?: string;
+  type?: string;
+  company?: RawCompanyItem;
+  nodes?: RawLineNode[];
+}
+
+interface RawShapeFeature {
+  geometry?: { type?: string; coordinates?: number[][] };
+  properties?: { transport_type?: string; ways?: string };
+}
+
+interface RawShapeRouteItem {
+  sections?: (RawRouteSection & {
+    transport?: {
+      color?: string;
+      links?: { id?: string | number }[];
+    };
+  })[];
+  shapes?: { features?: RawShapeFeature[] };
 }
 
 function geocodeResults(
@@ -547,6 +616,203 @@ export function nearestStationCandidates(
     .filter((s) => haversineMeters(origin, s) <= radius)
     .sort((a, b) => haversineMeters(origin, a) - haversineMeters(origin, b))
     .slice(0, candidates);
+}
+
+export function normalizeStationLines(
+  raw: RawItemsResponse<RawStationDetailItem>,
+): NormalizedStationLines {
+  const stations: StationWithLines[] = (raw.items ?? []).map((item) => {
+    const lines: StationLine[] = [];
+    for (const detail of item.details ?? []) {
+      const lineId = detail.link?.id !== undefined
+        ? String(detail.link.id)
+        : null;
+      if (lineId === null || lines.some((l) => l.lineId === lineId)) continue;
+      lines.push({
+        lineId,
+        lineName: detail.link?.name ?? "",
+        operator: detail.company?.name ?? null,
+        color: detail.link?.color ?? null,
+      });
+    }
+    return {
+      stationId: String(item.id ?? ""),
+      stationName: item.name ?? "",
+      lines,
+    };
+  });
+  return { stations };
+}
+
+// 駅（複数可）が属する路線一覧。ID はピリオド区切りで 1 リクエストにまとめられる。
+export async function fetchStationLines(
+  stationIds: string[],
+  apiKey: string,
+): Promise<NormalizedStationLines> {
+  const raw = await rapidApiGet(TRANSPORT_HOST, "/transport_node/id", {
+    id: stationIds.join("."),
+    options: "detail",
+  }, apiKey) as RawItemsResponse<RawStationDetailItem>;
+  return normalizeStationLines(raw);
+}
+
+// 経由地は最大 3 点まで等間隔に選び、route が対象路線から外れないようにする。
+export function viaIndexes(
+  start: number,
+  end: number,
+  count: number,
+): number[] {
+  if (end - start <= 1 || count < 1) return [];
+  const step = (end - start) / (count + 1);
+  const picked = new Set<number>();
+  for (let k = 1; k <= count; k += 1) {
+    const i = Math.round(start + step * k);
+    if (i > start && i < end) picked.add(i);
+  }
+  return [...picked].sort((a, b) => a - b);
+}
+
+// route_transit の shape から「全区間が対象路線」の候補だけを採用する。
+// 他路線が混ざった候補を捨てることで、feature を路線に確実に帰属させられる。
+function pickLineShapes(
+  lineId: string,
+  raw: RawItemsResponse<RawShapeRouteItem>,
+): { coordinates: number[][][]; color: string | null } | null {
+  for (const item of raw.items ?? []) {
+    const moves = (item.sections ?? []).filter((s) => s.transport);
+    const linkIds = moves.flatMap((s) =>
+      (s.transport?.links ?? []).map((l) => String(l.id ?? ""))
+    );
+    if (linkIds.length === 0 || !linkIds.every((id) => id === lineId)) continue;
+    const coordinates = (item.shapes?.features ?? [])
+      .filter((f) =>
+        f.properties?.transport_type === "railway" &&
+        f.geometry?.type === "LineString" &&
+        Array.isArray(f.geometry.coordinates)
+      )
+      .map((f) => f.geometry!.coordinates!);
+    if (coordinates.length === 0) continue;
+    return {
+      coordinates,
+      color: moves.find((s) => s.transport?.color)?.transport?.color ?? null,
+    };
+  }
+  return null;
+}
+
+async function fetchLineSegmentShapes(
+  lineId: string,
+  nodes: { id: string; name: string; lat: number; lng: number }[],
+  start: number,
+  end: number,
+  startTime: string,
+  apiKey: string,
+  depth: number,
+  counter: { requests: number },
+): Promise<{ coordinates: number[][][]; color: string | null }> {
+  const from = nodes[start];
+  const to = nodes[end];
+  const params: Record<string, string> = {
+    start: `${from.lat},${from.lng}`,
+    goal: `${to.lat},${to.lng}`,
+    start_time: startTime,
+    shape: "true",
+    limit: "5",
+    coord_unit: "degree",
+    datum: "wgs84",
+  };
+  const via = viaIndexes(start, end, depth === 0 ? 3 : 1);
+  if (via.length > 0) {
+    params.via = JSON.stringify(
+      via.map((i) => ({ lat: nodes[i].lat, lon: nodes[i].lng })),
+    );
+  }
+  counter.requests += 1;
+  const raw = await rapidApiGet(
+    ROUTE_HOST,
+    "/route_transit",
+    params,
+    apiKey,
+  ) as RawItemsResponse<RawShapeRouteItem>;
+  const picked = pickLineShapes(lineId, raw);
+  if (picked) return picked;
+  // 他路線経由が最短になる区間は、二分割して路線内だけを通る区間へ落とし込む。
+  if (end - start <= 1 || depth >= 3) {
+    return { coordinates: [], color: null };
+  }
+  const mid = Math.floor((start + end) / 2);
+  const halves = await Promise.all([
+    fetchLineSegmentShapes(
+      lineId,
+      nodes,
+      start,
+      mid,
+      startTime,
+      apiKey,
+      depth + 1,
+      counter,
+    ),
+    fetchLineSegmentShapes(
+      lineId,
+      nodes,
+      mid,
+      end,
+      startTime,
+      apiKey,
+      depth + 1,
+      counter,
+    ),
+  ]);
+  return {
+    coordinates: halves.flatMap((h) => h.coordinates),
+    color: halves.find((h) => h.color)?.color ?? null,
+  };
+}
+
+export async function fetchRailwayGeometry(
+  lineId: string,
+  startTime: string,
+  apiKey: string,
+): Promise<NormalizedRailwayGeometry> {
+  const counter = { requests: 1 };
+  const rawLine = await rapidApiGet(TRANSPORT_HOST, "/transport_link/id", {
+    id: lineId,
+    options: "node",
+  }, apiKey) as RawItemsResponse<RawLineItem>;
+  const [line] = rawLine.items ?? [];
+  if (!line) throw new Error(`line ${lineId} not found`);
+  const nodes = (line.nodes ?? [])
+    .filter((n) =>
+      typeof n.coord?.lat === "number" && typeof n.coord?.lon === "number"
+    )
+    .map((n) => ({
+      id: String(n.id ?? ""),
+      name: n.name ?? "",
+      lat: n.coord!.lat!,
+      lng: n.coord!.lon!,
+    }));
+  if (nodes.length < 2) throw new Error(`line ${lineId} has no station list`);
+
+  const shapes = await fetchLineSegmentShapes(
+    lineId,
+    nodes,
+    0,
+    nodes.length - 1,
+    startTime,
+    apiKey,
+    0,
+    counter,
+  );
+
+  return {
+    lineId,
+    lineName: line.name ?? "",
+    operator: line.company?.name ?? null,
+    color: shapes.color,
+    geometry: { type: "MultiLineString", coordinates: shapes.coordinates },
+    stationIds: nodes.map((n) => n.id),
+    requestCount: counter.requests,
+  };
 }
 
 export async function fetchAccessStations(

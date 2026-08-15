@@ -2,10 +2,12 @@
 import type {
   NormalizedAccessStations,
   NormalizedGeocode,
+  NormalizedRailwayGeometry,
   NormalizedReachable,
   NormalizedReachableArea,
   NormalizedReverseGeocode,
   NormalizedRoute,
+  NormalizedStationLines,
   NormalizedTransport,
   NormalizedTransportCompany,
   ReachableAreaMode,
@@ -320,5 +322,75 @@ export function mockRoute(
         sections: [],
       },
     ],
+  };
+}
+
+const MOCK_LINES: Record<string, {
+  lineId: string;
+  lineName: string;
+  operator: string;
+  color: string;
+}> = {
+  "00000766": {
+    lineId: "00000766",
+    lineName: "東京メトロ丸ノ内線（mock）",
+    operator: "東京地下鉄（メトロ）",
+    color: "#F62E36",
+  },
+  "00000141": {
+    lineId: "00000141",
+    lineName: "ＪＲ山手線（mock）",
+    operator: "ＪＲ東日本",
+    color: "#80C241",
+  },
+  "00000771": {
+    lineId: "00000771",
+    lineName: "東京メトロ東西線（mock）",
+    operator: "東京地下鉄（メトロ）",
+    color: "#009BBF",
+  },
+};
+
+export function mockStationLines(ids: string[]): NormalizedStationLines {
+  const lineIds = Object.keys(MOCK_LINES);
+  return {
+    stations: ids.map((id, i) => ({
+      stationId: id,
+      stationName: `駅${i + 1}（mock）`,
+      lines: lineIds
+        .slice(i % lineIds.length)
+        .concat(lineIds.slice(0, i % lineIds.length))
+        .slice(0, 2)
+        .map((lineId) => MOCK_LINES[lineId]),
+    })),
+  };
+}
+
+export function mockRailwayGeometry(lineId: string): NormalizedRailwayGeometry {
+  const line = MOCK_LINES[lineId] ?? {
+    lineId,
+    lineName: `路線${lineId}（mock）`,
+    operator: "mock 鉄道",
+    color: "#4C6EF5",
+  };
+  return {
+    ...line,
+    geometry: {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [139.767106, 35.681041],
+          [139.7639, 35.6727],
+          [139.7621, 35.6712],
+        ],
+        [
+          [139.7621, 35.6712],
+          [139.758, 35.6702],
+          [139.7537, 35.6754],
+        ],
+      ],
+    },
+    stationIds: ["00006668", "00001908", "00005079"],
+    requestCount: 0,
   };
 }
