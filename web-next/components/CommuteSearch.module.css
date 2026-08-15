@@ -1,0 +1,164 @@
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.title {
+  font-size: 1.6rem;
+}
+
+.subtitle {
+  color: #666;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+  font-size: 0.9rem;
+}
+
+.field input {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.validation {
+  color: #c0392b;
+  font-size: 0.9rem;
+}
+
+.button {
+  align-self: flex-start;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.info {
+  color: #666;
+}
+
+.error {
+  color: #c0392b;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workplace {
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.badge {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid #d08700;
+  border-radius: 999px;
+  color: #d08700;
+  font-size: 0.75rem;
+}
+
+.count {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.moreButton {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border: 1px solid #888;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.moreButton:hover {
+  border-color: #444;
+}
+
+.stationList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.station {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.stationName {
+  font-weight: 600;
+}
+
+.stationMeta {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .form,
+  .station {
+    border-color: #333;
+  }
+
+  .subtitle,
+  .info,
+  .stationMeta {
+    color: #aaa;
+  }
+
+  .workplace {
+    color: #bbb;
+  }
+
+  .field input {
+    border-color: #444;
+  }
+}

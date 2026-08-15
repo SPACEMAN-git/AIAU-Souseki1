@@ -9,3 +9,6 @@ npm install
 cp .env.example .env.local
 npm run dev   # http://localhost:3000
 ```
+
+`.env.local` に `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` を設定すると、デプロイ済みの `navitime-proxy` 経由で実 NAVITIME（Geocoding / Reachable transit）を呼ぶ。RapidAPI key は Edge Function 側のみが保持する。
+オフライン確認したいときだけ `NEXT_PUBLIC_NAVITIME_MOCK=1` を設定する（結果に「モックデータ」バッジが出る）。
