@@ -12,23 +12,13 @@ import type { ListingWithCommute } from '../lib/types'
 const LISTING_COLOR = '#dc2626'
 const FAVORITE_COLOR = '#eab308'
 
-function listingsToGeoJSON(
-  results: ListingWithCommute[],
-  favorites: string[],
-): FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: results.map((l) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [l.lng, l.lat] },
-      properties: {
-        id: l.id,
-        title: l.title,
-        rent: formatRentShort(l.monthlyRent),
-        color: favorites.includes(l.id) ? FAVORITE_COLOR : LISTING_COLOR,
-      },
-    })),
-  }
+const PILL_CLASS =
+  'cursor-pointer rounded-full border-2 border-white px-1.5 py-0.5 text-[11px] leading-none font-bold text-white shadow transition-transform'
+
+/** Rent shown on the map pill in 万円 units, e.g. 85000 -> "8.5万". */
+export function rentPillLabel(yen: number): string {
+  const man = yen / 10000
+  return `${Number.isInteger(man) ? man : man.toFixed(1)}万`
 }
 
 /** Route line of the selected listing, split into walk / transit parts. */
@@ -54,7 +44,7 @@ export function MapView() {
   const mapRef = useRef<MlMap | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const companyMarkerRef = useRef<maplibregl.Marker | null>(null)
-  const popupRef = useRef<maplibregl.Popup | null>(null)
+  const markersRef = useRef(new Map<string, maplibregl.Marker>())
   const {
     locale,
     results,
@@ -64,6 +54,7 @@ export function MapView() {
     selectedListingId,
     hoveredListingId,
     selectListing,
+    hoverListing,
     openDetail,
     mapPickMode,
     setMapPickMode,
@@ -93,10 +84,6 @@ export function MapView() {
     })
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
     map.on('error', (e) => console.error('maplibre', e.error?.message ?? e))
-    popupRef.current = new maplibregl.Popup({
-      closeButton: false,
-      offset: 12,
-    })
     map.on('load', () => {
       map.addSource('isochrone', {
         type: 'geojson',
@@ -150,41 +137,6 @@ export function MapView() {
           'line-dasharray': [1.4, 1.1],
         },
       })
-      map.addSource('listings', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      })
-      map.addLayer({
-        id: 'listing-points',
-        type: 'circle',
-        source: 'listings',
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': 9,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
-        },
-      })
-      map.on('click', 'listing-points', (e: maplibregl.MapLayerMouseEvent) => {
-        const id = e.features?.[0]?.properties?.id as string | undefined
-        if (id) {
-          selectListing(id)
-          openDetail(id)
-        }
-      })
-      map.on('mouseenter', 'listing-points', (e: maplibregl.MapLayerMouseEvent) => {
-        map.getCanvas().style.cursor = 'pointer'
-        const p = e.features?.[0]?.properties
-        if (!p) return
-        popupRef.current
-          ?.setLngLat(e.lngLat)
-          .setText(`${p.title} / ${p.rent}`)
-          .addTo(map)
-      })
-      map.on('mouseleave', 'listing-points', () => {
-        map.getCanvas().style.cursor = ''
-        popupRef.current?.remove()
-      })
     })
     mapRef.current = map
     return () => {
@@ -219,19 +171,38 @@ export function MapView() {
     }
   }, [mapPickMode, setCompany, setMapPickMode])
 
-  // Update listings source.
+  // Listing markers: rent pills (万円) that are always visible and clickable.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const apply = () => {
-      const source = map.getSource('listings') as
-        | maplibregl.GeoJSONSource
-        | undefined
-      source?.setData(listingsToGeoJSON(results, favorites))
+    for (const m of markersRef.current.values()) m.remove()
+    markersRef.current.clear()
+    for (const l of results) {
+      const el = document.createElement('div')
+      el.className = PILL_CLASS
+      el.style.backgroundColor = favorites.includes(l.id)
+        ? FAVORITE_COLOR
+        : LISTING_COLOR
+      el.textContent = rentPillLabel(l.monthlyRent)
+      el.title = `${l.title} / ${formatRentShort(l.monthlyRent)}`
+      el.addEventListener('click', () => {
+        selectListing(l.id)
+        openDetail(l.id)
+      })
+      el.addEventListener('mouseenter', () => hoverListing(l.id))
+      el.addEventListener('mouseleave', () => hoverListing(null))
+      markersRef.current.set(
+        l.id,
+        new maplibregl.Marker({ element: el })
+          .setLngLat([l.lng, l.lat])
+          .addTo(map),
+      )
     }
-    if (map.getSource('listings')) apply()
-    else map.once('load', apply)
-  }, [results, favorites])
+    return () => {
+      for (const m of markersRef.current.values()) m.remove()
+      markersRef.current.clear()
+    }
+  }, [results, favorites, selectListing, openDetail, hoverListing])
 
   // Draw the selected listing's route line.
   useEffect(() => {
@@ -312,19 +283,17 @@ export function MapView() {
     }
   }, [selectedListingId, results])
 
-  // Highlight hovered listing.
+  // Highlight hovered / selected listing pills.
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !map.getLayer('listing-points')) return
-    map.setPaintProperty('listing-points', 'circle-radius', [
-      'case',
-      ['==', ['get', 'id'], hoveredListingId ?? ''],
-      14,
-      ['==', ['get', 'id'], selectedListingId ?? ''],
-      13,
-      9,
-    ])
-  }, [hoveredListingId, selectedListingId])
+    for (const [id, marker] of markersRef.current) {
+      const active = id === hoveredListingId || id === selectedListingId
+      const el = marker.getElement()
+      el.style.zIndex = active ? '2' : '1'
+      el.style.scale = active ? '1.25' : '1'
+      el.style.outline = id === selectedListingId ? '2px solid #1d4ed8' : ''
+      el.style.outlineOffset = '1px'
+    }
+  }, [hoveredListingId, selectedListingId, results, favorites])
 
   return (
     <div className="relative h-full w-full">
@@ -366,9 +335,11 @@ function MapLegend() {
       <div className="mt-2 space-y-1 text-gray-600">
         <div className="flex items-center gap-1">
           <span
-            className="inline-block h-3 w-3 rounded-full border border-white"
+            className="inline-block rounded-full border border-white px-1 text-[10px] leading-tight font-bold text-white"
             style={{ backgroundColor: LISTING_COLOR }}
-          />
+          >
+            8.5万
+          </span>
           {t(locale, 'listingPoint')}
         </div>
         <div className="flex items-center gap-1">

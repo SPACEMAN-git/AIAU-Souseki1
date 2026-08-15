@@ -1,22 +1,16 @@
-import { useRef, useState } from "react";
-import type { PlaceCandidate, TravelMode } from "../lib/types";
-import { useAppStore } from "../store/appStore";
-import { t } from "../lib/i18n";
-import { MAX_COMMUTE_LIMIT, MAX_COMMUTE_OPTIONS } from "../lib/config";
-import { withFallback } from "../providers";
-import { geocodeAddress } from "../lib/geocodingJp";
+import { useRef, useState } from 'react'
+import type { PlaceCandidate, TravelMode } from '../lib/types'
+import { useAppStore } from '../store/appStore'
+import { t } from '../lib/i18n'
+import { MAX_COMMUTE_LIMIT, MAX_COMMUTE_OPTIONS } from '../lib/config'
+import { withFallback } from '../providers'
+import { geocodeAddress } from '../lib/geocodingJp'
 
-const MODES: TravelMode[] = [
-  "transit",
-  "walk_transit",
-  "car",
-  "bicycle",
-  "walk",
-];
+const MODES: TravelMode[] = ['transit', 'walk_transit', 'car', 'bicycle', 'walk']
 
 /** Suggestions hit the paid NAVITIME quota, so keep keystroke calls low. */
-const SUGGEST_MIN_LENGTH = 2;
-const SUGGEST_DEBOUNCE_MS = 500;
+const SUGGEST_MIN_LENGTH = 2
+const SUGGEST_DEBOUNCE_MS = 500
 
 export function SearchBar({ onSearch }: { onSearch: () => void }) {
   const {
@@ -28,96 +22,98 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
     setMapPickMode,
     searching,
     setLocale,
-  } = useAppStore();
-  const [query, setQuery] = useState("");
-  const [minutesText, setMinutesText] = useState(String(conditions.maxMinutes));
-  const [candidates, setCandidates] = useState<PlaceCandidate[]>([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [geocoding, setGeocoding] = useState(false);
-  const [geocodeError, setGeocodeError] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  } = useAppStore()
+  const [query, setQuery] = useState('')
+  const [minutesText, setMinutesText] = useState(String(conditions.maxMinutes))
+  const [candidates, setCandidates] = useState<PlaceCandidate[]>([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [geocoding, setGeocoding] = useState(false)
+  const [geocodeError, setGeocodeError] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const runGeocode = async () => {
-    const q = query.trim();
-    if (!q || geocoding) return;
-    setGeocoding(true);
-    setGeocodeError(false);
+    const q = query.trim()
+    if (!q || geocoding) return
+    setGeocoding(true)
+    setGeocodeError(false)
     try {
-      const res = await geocodeAddress(q);
+      const res = await geocodeAddress(q)
       if (res.length === 0) {
-        setGeocodeError(true);
+        setGeocodeError(true)
       } else {
-        setCandidates(res);
-        setOpen(true);
+        setCandidates(res)
+        setOpen(true)
       }
     } catch {
-      setGeocodeError(true);
+      setGeocodeError(true)
     } finally {
-      setGeocoding(false);
+      setGeocoding(false)
     }
-  };
+  }
 
   const handleInput = (v: string) => {
-    setQuery(v);
-    setGeocodeError(false);
-    clearTimeout(debounceRef.current);
+    setQuery(v)
+    setGeocodeError(false)
+    clearTimeout(debounceRef.current)
     if (v.trim().length < SUGGEST_MIN_LENGTH) {
-      setCandidates([]);
-      setOpen(v.trim().length > 0);
-      return;
+      setCandidates([])
+      setOpen(v.trim().length > 0)
+      return
     }
-    setOpen(true);
+    setOpen(true)
     debounceRef.current = setTimeout(async () => {
-      setLoading(true);
+      setLoading(true)
       try {
         const res = await withFallback(conditions.mode, (p) =>
           p.geocodePlace(v),
-        );
-        setCandidates(res);
-        setOpen(true);
+        )
+        setCandidates(res)
+        setOpen(true)
       } catch {
-        setCandidates([]);
+        setCandidates([])
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    }, SUGGEST_DEBOUNCE_MS);
-  };
+    }, SUGGEST_DEBOUNCE_MS)
+  }
 
-  /** Applies a hand-typed limit on blur/Enter so each keystroke is not a search. */
+  const setMinutes = (minutes: number) => {
+    setMinutesText(String(minutes))
+    if (minutes !== conditions.maxMinutes) setConditions({ maxMinutes: minutes })
+  }
+
+  /** Applies a hand-typed limit on blur/Enter, so typing does not re-search. */
   const commitMinutes = () => {
-    const n = Math.round(Number(minutesText));
+    const n = Math.round(Number(minutesText))
     if (!Number.isFinite(n) || n < 1) {
-      setMinutesText(String(conditions.maxMinutes));
-      return;
+      setMinutesText(String(conditions.maxMinutes))
+      return
     }
-    const minutes = Math.min(n, MAX_COMMUTE_LIMIT);
-    setMinutesText(String(minutes));
-    if (minutes !== conditions.maxMinutes)
-      setConditions({ maxMinutes: minutes });
-  };
+    setMinutes(Math.min(n, MAX_COMMUTE_LIMIT))
+  }
 
   const pick = (c: PlaceCandidate) => {
-    setCompany(c);
-    setQuery(c.name);
-    setOpen(false);
-  };
+    setCompany(c)
+    setQuery(c.name)
+    setOpen(false)
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-4 py-2 shadow-sm">
       <span className="text-lg font-bold text-indigo-700">
-        {t(locale, "appTitle")}
+        {t(locale, 'appTitle')}
       </span>
       <div className="relative min-w-64 flex-1">
         <input
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-          placeholder={t(locale, "searchPlaceholder")}
+          placeholder={t(locale, 'searchPlaceholder')}
           value={query}
           onChange={(e) => handleInput(e.target.value)}
           onFocus={() => query.trim().length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 200)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") runGeocode();
+            if (e.key === 'Enter') runGeocode()
           }}
         />
         {loading && (
@@ -134,37 +130,37 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
               onClick={runGeocode}
             >
               {geocoding
-                ? t(locale, "geocodeLoading")
-                : `\u{1F310} ${t(locale, "geocodeAddress")}`}
+                ? t(locale, 'geocodeLoading')
+                : `\u{1F310} ${t(locale, 'geocodeAddress')}`}
             </button>
             {geocodeError && (
               <p className="px-3 pb-2 text-xs text-red-500">
-                {t(locale, "geocodeNoResult")}
+                {t(locale, 'geocodeNoResult')}
               </p>
             )}
             {!loading &&
               candidates.length === 0 &&
               query.trim().length >= SUGGEST_MIN_LENGTH && (
                 <p className="px-3 pb-2 text-xs text-gray-500">
-                  {t(locale, "suggestEmpty")}
+                  {t(locale, 'suggestEmpty')}
                 </p>
               )}
             {candidates.length > 0 && (
               <ul className="max-h-72 w-full overflow-auto border-t border-gray-100">
-                {candidates.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      className="flex w-full flex-col px-3 py-2 text-left hover:bg-indigo-50"
-                      onClick={() => pick(c)}
-                    >
-                      <span className="text-sm font-medium">{c.name}</span>
-                      <span className="text-xs text-gray-500">
-                        {c.address}・{c.placeType}・{c.prefecture}（
-                        {c.lat.toFixed(4)}, {c.lng.toFixed(4)}）[{c.provider}]
-                      </span>
-                    </button>
-                  </li>
+            {candidates.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  className="flex w-full flex-col px-3 py-2 text-left hover:bg-indigo-50"
+                  onClick={() => pick(c)}
+                >
+                  <span className="text-sm font-medium">{c.name}</span>
+                  <span className="text-xs text-gray-500">
+                    {c.address}・{c.placeType}・{c.prefecture}（
+                    {c.lat.toFixed(4)}, {c.lng.toFixed(4)}）[{c.provider}]
+                  </span>
+                </button>
+              </li>
                 ))}
               </ul>
             )}
@@ -175,19 +171,19 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
         type="button"
         className="rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-600 hover:bg-gray-50"
         onClick={() => setMapPickMode(true)}
-        title={t(locale, "selectOnMap")}
+        title={t(locale, 'selectOnMap')}
       >
-        📍 {t(locale, "selectOnMap")}
+        📍 {t(locale, 'selectOnMap')}
       </button>
       <select
         className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
         value={conditions.mode}
         onChange={(e) => setConditions({ mode: e.target.value as TravelMode })}
-        aria-label={t(locale, "commuteMode")}
+        aria-label={t(locale, 'commuteMode')}
       >
         {MODES.map((m) => (
           <option key={m} value={m}>
-            {t(locale, `mode_${m}` as "mode_transit")}
+            {t(locale, `mode_${m}` as 'mode_transit')}
           </option>
         ))}
       </select>
@@ -198,22 +194,35 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
           min={1}
           max={MAX_COMMUTE_LIMIT}
           step={1}
-          list="max-commute-presets"
-          className="w-14 text-right focus:outline-none"
+          className="w-12 text-right focus:outline-none"
           value={minutesText}
           onChange={(e) => setMinutesText(e.target.value)}
           onBlur={commitMinutes}
           onKeyDown={(e) => {
-            if (e.key === "Enter") commitMinutes();
+            if (e.key === 'Enter') commitMinutes()
           }}
-          aria-label={t(locale, "maxCommute")}
+          aria-label={t(locale, 'maxCommute')}
         />
         <span className="text-gray-500">分</span>
-        <datalist id="max-commute-presets">
+        <select
+          className="-mr-1 border-l border-gray-200 pl-1 text-xs text-gray-500 focus:outline-none"
+          value={
+            MAX_COMMUTE_OPTIONS.includes(conditions.maxMinutes)
+              ? conditions.maxMinutes
+              : ''
+          }
+          onChange={(e) => setMinutes(Number(e.target.value))}
+          aria-label={t(locale, 'maxCommute')}
+        >
+          <option value="" disabled>
+            …
+          </option>
           {MAX_COMMUTE_OPTIONS.map((m) => (
-            <option key={m} value={m} />
+            <option key={m} value={m}>
+              {m}分
+            </option>
           ))}
-        </datalist>
+        </select>
       </div>
       <button
         type="button"
@@ -221,15 +230,15 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
         onClick={onSearch}
         className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
       >
-        {searching ? t(locale, "loading") : t(locale, "searchButton")}
+        {searching ? t(locale, 'loading') : t(locale, 'searchButton')}
       </button>
       <button
         type="button"
         className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
-        onClick={() => setLocale(locale === "ja" ? "zh" : "ja")}
+        onClick={() => setLocale(locale === 'ja' ? 'zh' : 'ja')}
       >
-        {locale === "ja" ? "中文" : "日本語"}
+        {locale === 'ja' ? '中文' : '日本語'}
       </button>
     </div>
-  );
+  )
 }
