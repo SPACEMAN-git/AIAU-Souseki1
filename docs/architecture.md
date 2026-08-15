@@ -23,7 +23,7 @@
    │       └─ route        : NAVITIME Route(totalnavi)（Door-to-Door 阶段）
    │
    └── Supabase Postgres（supabase-js 直连，匿名只读 RLS）
-           └─ properties：按地图 bounds 查询 mock 房源
+           └─ listings：按地图 bounds 查询房源（团队已建 schema + 80 条演示数据）
 ```
 
 约束与取舍：
@@ -33,8 +33,8 @@
   - **不使用** NAVITIME Map API v2、transport_shape（不在 RapidAPI 提供范围内）。
 - 地图使用 **MapLibre GL JS + OpenStreetMap**。铁路线路高亮/范围外虚化为后续增强，不阻塞 MVP。
 - RapidAPI Key 只存在于 Edge Function（Supabase Secrets），前端不接触。
-- 房源为 **mock 种子数据（约 500 套）**，覆盖东京 5–10 个车站周边，
-  用普通 lat/lng 列 + bounding-box 查询，不引入 PostGIS。
+- 房源使用团队已在 Supabase 项目中建好的 **`listings` 表**（含 80 条演示数据，
+  latitude/longitude + PostGIS geom），前端按 bounding-box 查询。
 - 不做用户系统/收藏；搜索条件放 URL query + React state。
 
 ## 3. 前端组件（web/）
@@ -54,25 +54,15 @@
 
 ### 表
 
-```sql
--- 必需：mock 房源
-create table properties (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  rent integer not null,          -- 月租（日元）
-  layout text,                    -- 1K / 1LDK ...
-  area_m2 numeric,
-  address text,
-  lat double precision not null,
-  lng double precision not null,
-  nearest_station text,
-  walk_minutes integer,
-  image_url text,
-  created_at timestamptz default now()
-);
-create index on properties (lat, lng);
--- RLS：匿名只读 select
-```
+房源表采用团队在 Supabase 项目中已建的 `listings`（主要列）：
+
+- `id uuid` / `title` / `property_name` / `address`
+- `latitude` / `longitude` / `geom`（PostGIS）
+- `monthly_rent` / `management_fee` / `layout` / `floor_area`
+- `nearest_station_name` / `walk_minutes_to_station` / `railway_line`
+- `image_urls` / `is_available` / `is_demo` 等
+
+另有 `stations`、`places`、`commute_cache`、`isochrone_cache` 等配套表（团队维护）。
 
 可选（后续）：`reachable_cache(cache_key, response jsonb, created_at)` 缓存 Reachable 结果、节省配额。
 
@@ -81,7 +71,7 @@ create index on properties (lat, lng);
 - `navitime-proxy`：单个函数，按 `action`（geocode / reachable / transport / route）分发到对应
   RapidAPI host，附加 `X-RapidAPI-Key`，透传 JSON。
 - 房源查询不经过 Edge Function：前端 supabase-js 直接
-  `select * from properties where lat between ... and lng between ... limit 200`。
+  `select * from listings where latitude between ... and longitude between ... limit 200`。
 
 ### 仓库内保存物
 
@@ -102,11 +92,11 @@ seed（`supabase/seed/`）均入库；secrets 只经 `supabase secrets set` / Ve
 | # | PR | 内容 | 依赖 |
 |---|---|---|---|
 | 1 | scaffold | Next.js 脚手架、README、本文档、目录结构、.env.example、本地运行说明 | — |
-| 2 | supabase schema + seed | properties 迁移 + RLS + 约 500 套 mock 房源（5–10 车站周边） | 1 |
+| 2 | ~~supabase schema + seed~~ | 已弃用：改用团队在 Supabase 项目中建的 `listings` 表 | — |
 | 3 | navitime-proxy | Edge Function（geocode / reachable / transport / route）+ secrets 说明 | 1 |
 | 4 | map base | MapView（MapLibre + OSM）、东京中心初始视图、bounds 事件 | 1 |
 | 5 | commute search | SearchForm + 勤務先 marker + 候选车站 markers | 3, 4 |
-| 6 | property loading | 按 bounds 动态加载房源 markers + 侧边列表 | 2, 4 |
+| 6 | property loading | 按 bounds 从 `listings` 动态加载房源 markers + 侧边列表 | 4 |
 | 7 | door-to-door | 点击房源 → Route(totalnavi) 路线详情 | 5, 6 |
 | 8 | deploy & polish | Vercel 部署、环境变量文档、demo 数据微调、loading/空状态 | 全部 |
 
