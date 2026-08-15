@@ -84,6 +84,15 @@ const dict = {
   updatedAt: { ja: '更新日', zh: '更新时间' },
   dataSource: { ja: 'データ提供', zh: '数据来源' },
   loading: { ja: '検索中…', zh: '搜索中…' },
+  geocodeAddress: {
+    ja: '住所から座標を検索（Geocoding.jp）',
+    zh: '将地址转换为坐标（Geocoding.jp）',
+  },
+  geocodeLoading: { ja: '住所を変換中…', zh: '正在转换地址…' },
+  geocodeNoResult: {
+    ja: '住所を変換できませんでした。表記を変えてお試しください。',
+    zh: '无法转换该地址，请更换写法后重试。',
+  },
 } as const
 
 type DictKey = keyof typeof dict

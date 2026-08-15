@@ -4,6 +4,7 @@ import { useAppStore } from '../store/appStore'
 import { t } from '../lib/i18n'
 import { MAX_COMMUTE_OPTIONS } from '../lib/config'
 import { withFallback } from '../providers'
+import { geocodeAddress } from '../lib/geocodingJp'
 
 const MODES: TravelMode[] = ['transit', 'walk_transit', 'car', 'bicycle', 'walk']
 
@@ -22,15 +23,40 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
   const [candidates, setCandidates] = useState<PlaceCandidate[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [geocoding, setGeocoding] = useState(false)
+  const [geocodeError, setGeocodeError] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  const runGeocode = async () => {
+    const q = query.trim()
+    if (!q || geocoding) return
+    setGeocoding(true)
+    setGeocodeError(false)
+    try {
+      const res = await geocodeAddress(q)
+      if (res.length === 0) {
+        setGeocodeError(true)
+      } else {
+        setCandidates(res)
+        setOpen(true)
+      }
+    } catch {
+      setGeocodeError(true)
+    } finally {
+      setGeocoding(false)
+    }
+  }
 
   const handleInput = (v: string) => {
     setQuery(v)
+    setGeocodeError(false)
     clearTimeout(debounceRef.current)
     if (v.trim().length < 1) {
       setCandidates([])
+      setOpen(false)
       return
     }
+    setOpen(true)
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
       try {
@@ -64,15 +90,36 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
           placeholder={t(locale, 'searchPlaceholder')}
           value={query}
           onChange={(e) => handleInput(e.target.value)}
-          onFocus={() => candidates.length > 0 && setOpen(true)}
+          onFocus={() => query.trim().length > 0 && setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 200)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') runGeocode()
+          }}
         />
         {loading && (
           <span className="absolute top-2.5 right-3 text-xs text-gray-400">
             …
           </span>
         )}
-        {open && candidates.length > 0 && (
-          <ul className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        {open && query.trim().length > 0 && (
+          <div className="absolute z-30 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-xs text-indigo-600 hover:bg-indigo-50 disabled:text-gray-400"
+              disabled={geocoding}
+              onClick={runGeocode}
+            >
+              {geocoding
+                ? t(locale, 'geocodeLoading')
+                : `\u{1F310} ${t(locale, 'geocodeAddress')}`}
+            </button>
+            {geocodeError && (
+              <p className="px-3 pb-2 text-xs text-red-500">
+                {t(locale, 'geocodeNoResult')}
+              </p>
+            )}
+            {candidates.length > 0 && (
+              <ul className="max-h-72 w-full overflow-auto border-t border-gray-100">
             {candidates.map((c) => (
               <li key={c.id}>
                 <button
@@ -87,8 +134,10 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
                   </span>
                 </button>
               </li>
-            ))}
-          </ul>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
       <button

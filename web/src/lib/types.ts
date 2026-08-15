@@ -14,6 +14,7 @@ export type ProviderName =
   | 'cache'
   | 'gsi'
   | 'geolonia'
+  | 'geocoding_jp'
 
 export interface LatLng {
   lat: number

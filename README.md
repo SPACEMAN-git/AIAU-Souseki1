@@ -27,6 +27,8 @@ npm run dev
 
 `.env` なしで動作します（`VITE_DEMO_MODE=true` 相当）。80 件の架空物件・デモ駅ネットワークで全機能を試せます。
 
+住所→座標変換（Geocoding.jp）: 検索欄に住所を入力して Enter（または候補内のボタン）で座標に変換できます。Supabase 接続時は Edge Function `geocode-place` 経由、未接続の開発時は Vite dev プロキシ `/geocoding-api` 経由で直接呼び出します（約 10 秒に 1 リクエストの制限をクライアント側でも遵守）。
+
 ## 検索アルゴリズム（階層型）
 
 1. 交通手段×最大時間から検索半径を推定
