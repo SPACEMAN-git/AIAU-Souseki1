@@ -3,9 +3,11 @@ import {
   geocodeFromTransport,
   normalizeGeocode,
   normalizeReachable,
+  normalizeReachableArea,
   normalizeReverseGeocode,
   normalizeRoute,
   normalizeTransport,
+  normalizeTransportCompany,
 } from "./navitime.ts";
 import {
   mockGeocode,
@@ -64,6 +66,79 @@ Deno.test("handler: reverse_geocode (mock=1) / lat不正は 400", async () => {
 
   const bad = await handleRequest(
     new Request("http://local/x?action=reverse_geocode&lat=abc&mock=1"),
+  );
+  assertEquals(bad.status, 400);
+});
+
+Deno.test("normalizeReachableArea: coord 列 -> boundary", () => {
+  const n = normalizeReachableArea(
+    { lat: 35.665251, lng: 139.712092 },
+    30,
+    "bicycle",
+    15,
+    {
+      items: [
+        { coord: { lat: 35.623079, lon: 139.706072 } },
+        { coord: { lat: 35.625683, lon: 139.691452 } },
+        { name: "coord なしは除外される" },
+      ],
+    },
+  );
+  assertEquals(n.mode, "bicycle");
+  assertEquals(n.bicycleSpeed, 15);
+  assertEquals(n.boundary, [
+    { lat: 35.623079, lng: 139.706072 },
+    { lat: 35.625683, lng: 139.691452 },
+  ]);
+});
+
+Deno.test("normalizeTransportCompany: items -> company（0 件は null）", () => {
+  const found = normalizeTransportCompany("00000004", {
+    items: [{ id: "00000004", name: "ＪＲ東日本" }],
+  });
+  assertEquals(found.company, { id: "00000004", name: "ＪＲ東日本" });
+  assertEquals(normalizeTransportCompany("99999999", {}).company, null);
+});
+
+Deno.test("handler: reachable_area (mock=1) / mode 不正は 400", async () => {
+  const ok = await handleRequest(
+    new Request(
+      "http://local/x?action=reachable_area&lat=35.665&lng=139.712&term=30&mode=bicycle&bicycle_speed=15&mock=1",
+    ),
+  );
+  const body = await ok.json();
+  assertEquals(ok.status, 200);
+  assertEquals(body.data.mode, "bicycle");
+  assertEquals(body.data.bicycleSpeed, 15);
+  assertEquals(body.data.boundary.length, 6);
+
+  const walk = await handleRequest(
+    new Request(
+      "http://local/x?action=reachable_area&lat=35.665&lng=139.712&term=15&mode=walk&mock=1",
+    ),
+  );
+  const walkBody = await walk.json();
+  assertEquals(walkBody.data.mode, "walk");
+  assertEquals(walkBody.data.bicycleSpeed, null);
+
+  const bad = await handleRequest(
+    new Request(
+      "http://local/x?action=reachable_area&lat=35.665&lng=139.712&term=30&mode=car&mock=1",
+    ),
+  );
+  assertEquals(bad.status, 400);
+});
+
+Deno.test("handler: transport_company (mock=1) / id 無しは 400", async () => {
+  const ok = await handleRequest(
+    new Request("http://local/x?action=transport_company&id=00000004&mock=1"),
+  );
+  const body = await ok.json();
+  assertEquals(ok.status, 200);
+  assertEquals(body.data.company.id, "00000004");
+
+  const bad = await handleRequest(
+    new Request("http://local/x?action=transport_company&mock=1"),
   );
   assertEquals(bad.status, 400);
 });

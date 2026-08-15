@@ -35,6 +35,27 @@ export interface NormalizedReachable {
   stations: ReachableStation[];
 }
 
+export type ReachableAreaMode = "bicycle" | "walk";
+
+// 自転車 / 徒歩の reachable は駅ではなく到達圏の境界点列を返す。
+export interface NormalizedReachableArea {
+  origin: { lat: number; lng: number };
+  term: number;
+  mode: ReachableAreaMode;
+  bicycleSpeed: number | null;
+  boundary: { lat: number; lng: number }[];
+}
+
+export interface TransportCompany {
+  id: string;
+  name: string;
+}
+
+export interface NormalizedTransportCompany {
+  id: string;
+  company: TransportCompany | null;
+}
+
 export interface TransportNode {
   id: string;
   name: string;
@@ -104,6 +125,11 @@ interface RawReachableItem {
   coord?: RawCoord;
   time?: number;
   transit_count?: number;
+}
+
+interface RawCompanyItem {
+  id?: string | number;
+  name?: string;
 }
 
 interface RawTransportItem {
@@ -206,6 +232,34 @@ export function normalizeReachable(
     }))
     .sort((a, b) => a.timeMinutes - b.timeMinutes);
   return { origin, term, transitLimit, stations };
+}
+
+export function normalizeReachableArea(
+  origin: { lat: number; lng: number },
+  term: number,
+  mode: ReachableAreaMode,
+  bicycleSpeed: number | null,
+  raw: RawItemsResponse<RawGeocodeItem>,
+): NormalizedReachableArea {
+  const boundary = (raw.items ?? [])
+    .filter((it) =>
+      typeof it.coord?.lat === "number" && typeof it.coord?.lon === "number"
+    )
+    .map((it) => ({ lat: it.coord!.lat!, lng: it.coord!.lon! }));
+  return { origin, term, mode, bicycleSpeed, boundary };
+}
+
+export function normalizeTransportCompany(
+  id: string,
+  raw: RawItemsResponse<RawCompanyItem>,
+): NormalizedTransportCompany {
+  const [first] = raw.items ?? [];
+  return {
+    id,
+    company: first
+      ? { id: String(first.id ?? id), name: first.name ?? "" }
+      : null,
+  };
 }
 
 export function normalizeTransport(
@@ -351,6 +405,41 @@ export async function fetchReachable(
     apiKey,
   ) as RawItemsResponse<RawReachableItem>;
   return normalizeReachable(origin, term, transitLimit, raw);
+}
+
+export async function fetchReachableArea(
+  origin: { lat: number; lng: number },
+  term: number,
+  mode: ReachableAreaMode,
+  bicycleSpeed: number | null,
+  apiKey: string,
+): Promise<NormalizedReachableArea> {
+  const params: Record<string, string> = {
+    start: `${origin.lat},${origin.lng}`,
+    term: String(term),
+    coord_unit: "degree",
+    datum: "wgs84",
+  };
+  if (mode === "bicycle" && bicycleSpeed !== null) {
+    params.bicycle_speed = String(bicycleSpeed);
+  }
+  const raw = await rapidApiGet(
+    REACHABLE_HOST,
+    mode === "bicycle" ? "/reachable_bicycle" : "/reachable_walk",
+    params,
+    apiKey,
+  ) as RawItemsResponse<RawGeocodeItem>;
+  return normalizeReachableArea(origin, term, mode, bicycleSpeed, raw);
+}
+
+export async function fetchTransportCompany(
+  id: string,
+  apiKey: string,
+): Promise<NormalizedTransportCompany> {
+  const raw = await rapidApiGet(TRANSPORT_HOST, "/transport_company/id", {
+    id,
+  }, apiKey) as RawItemsResponse<RawCompanyItem>;
+  return normalizeTransportCompany(id, raw);
 }
 
 export async function fetchTransportNode(

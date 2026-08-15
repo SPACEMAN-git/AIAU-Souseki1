@@ -2,7 +2,7 @@
 //
 // 単体テスト（navitime.test.ts）は完全に mock で、このファイルだけが実 API を叩く。
 // RAPIDAPI_KEY が無い場合はスキップされる（CI で落ちない）。
-// RapidAPI の無料プランは各 API 500 req/月 のため、1 回の実行で 7 リクエストに抑える。
+// RapidAPI の無料プランは各 API 500 req/月 のため、1 回の実行で 9 リクエストに抑える。
 //
 //   deno test --allow-env --allow-net supabase/functions/navitime-proxy/navitime.integration.test.ts
 //
@@ -131,6 +131,33 @@ Deno.test({
       );
     });
 
+    await t.step(
+      `reachable_area 自転車 30 分 @ ${REACHABLE_HOST}`,
+      async () => {
+        const data = await callProxy(
+          "action=reachable_area&lat=35.665251&lng=139.712092&term=30&mode=bicycle&bicycle_speed=15",
+        );
+        assertEquals(data.mode, "bicycle");
+        assertEquals(data.bicycleSpeed, 15);
+        assert(data.boundary.length > 2, "boundary is too small");
+        assert(
+          data.boundary.every((p: { lat: number; lng: number }) =>
+            p.lat > 20 && p.lat < 46 && p.lng > 122 && p.lng < 154
+          ),
+          "boundary point out of Japan bbox",
+        );
+        console.log(`  reachable_area -> 境界点 ${data.boundary.length} 件`);
+      },
+    );
+
+    await t.step(`transport_company @ ${TRANSPORT_HOST}`, async () => {
+      const data = await callProxy("action=transport_company&id=00000004");
+      assert(data.company, "company not found");
+      assertEquals(data.company.id, "00000004");
+      assert(data.company.name.length > 0);
+      console.log(`  transport_company -> ${data.company.name}`);
+    });
+
     await t.step(`transport 駅メタデータ @ ${TRANSPORT_HOST}`, async () => {
       const data = await callProxy(
         `action=transport&q=${encodeURIComponent("東京駅")}&limit=5`,
@@ -170,7 +197,7 @@ Deno.test({
         calls.map((c) => `    - ${c.host} => ${c.status}`).join("\n")
       }`,
     );
-    assertEquals(calls.length, 7, "unexpected upstream request count");
+    assertEquals(calls.length, 9, "unexpected upstream request count");
     assert(
       calls.every((c) => c.status === 200),
       `non-200 upstream response: ${JSON.stringify(calls)}`,

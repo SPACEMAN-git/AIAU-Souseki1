@@ -2,9 +2,12 @@
 import type {
   NormalizedGeocode,
   NormalizedReachable,
+  NormalizedReachableArea,
   NormalizedReverseGeocode,
   NormalizedRoute,
   NormalizedTransport,
+  NormalizedTransportCompany,
+  ReachableAreaMode,
   TransportNode,
 } from "./navitime.ts";
 
@@ -114,6 +117,29 @@ export function mockReachable(
       (transitLimit === null || s.transfers <= transitLimit)
     ),
   };
+}
+
+// mock の到達圏は起点を囲む正六角形（分速から半径を概算）。
+export function mockReachableArea(
+  origin: { lat: number; lng: number },
+  term: number,
+  mode: ReachableAreaMode,
+  bicycleSpeed: number | null,
+): NormalizedReachableArea {
+  const kmPerMinute = mode === "bicycle" ? (bicycleSpeed ?? 15) / 60 : 0.08;
+  const radiusDeg = (kmPerMinute * term) / 111;
+  const boundary = Array.from({ length: 6 }, (_, i) => {
+    const rad = (Math.PI / 3) * i;
+    return {
+      lat: Number((origin.lat + radiusDeg * Math.cos(rad)).toFixed(6)),
+      lng: Number((origin.lng + radiusDeg * Math.sin(rad)).toFixed(6)),
+    };
+  });
+  return { origin, term, mode, bicycleSpeed, boundary };
+}
+
+export function mockTransportCompany(id: string): NormalizedTransportCompany {
+  return { id, company: { id, name: "ＪＲ東日本（mock）" } };
 }
 
 const MOCK_NODES: TransportNode[] = [
