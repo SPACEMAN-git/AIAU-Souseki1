@@ -1,12 +1,18 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { FeatureCollection, Point } from 'geojson'
 type MlMap = maplibregl.Map
 import { useAppStore } from '../store/appStore'
 import { GSI_ATTRIBUTION, GSI_TILE_URL } from '../lib/config'
-import { formatRentShort } from '../lib/format'
+import { formatMinutes, formatRentShort, formatYen } from '../lib/format'
 import { t } from '../lib/i18n'
+import type { Locale } from '../lib/i18n'
 import type { ListingWithCommute } from '../lib/types'
+
+// maplibre-gl resolves its worker relative to its own module URL, which does not
+// exist once the library is bundled; point it at the emitted worker asset.
+maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
 function commuteColor(minutes: number | undefined): string {
   if (minutes == null) return '#6b7280'
@@ -36,8 +42,52 @@ function listingsToGeoJSON(
   }
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c,
+  )
+}
+
+/** Compact key facts shown in the map popup of the selected listing. */
+function popupHtml(listing: ListingWithCommute, locale: Locale): string {
+  const commute = listing.commute
+  const rows = [
+    `${listing.layout}・${listing.floorArea}m²・${t(locale, 'buildingAge')}${listing.buildingAge}`,
+    `${listing.nearestStationName}・${t(locale, 'stationWalk')}${listing.walkMinutesToStation}分`,
+    commute
+      ? `${t(locale, 'commuteTime')} ${formatMinutes(commute.durationMinutes)}・${t(locale, 'transfers')}${commute.transferCount}${
+          commute.isEstimated ? `（${t(locale, 'estimated')}）` : ''
+        }`
+      : null,
+  ].filter((r): r is string => r != null)
+  return `<div style="min-width:11rem">
+    <div style="font-weight:600;font-size:0.875rem">${escapeHtml(listing.title)}</div>
+    <div style="font-weight:700;font-size:1rem;color:#4338ca;margin:2px 0 4px">${escapeHtml(
+      formatYen(listing.monthlyRent),
+    )}</div>
+    ${rows
+      .map(
+        (r) =>
+          `<div style="font-size:0.75rem;color:#4b5563">${escapeHtml(r)}</div>`,
+      )
+      .join('')}
+  </div>`
+}
+
+/**
+ * Runs `apply` once the map's data layers exist. `map.isStyleLoaded()` is false
+ * while raster tiles are still loading, so it cannot be used as the readiness
+ * signal: the `load` event may already have fired and never fire again.
+ */
+function whenLayersReady(map: MlMap, apply: () => void): void {
+  if (map.getLayer('listing-points')) apply()
+  else map.once('load', apply)
+}
+
 export function MapView() {
   const mapRef = useRef<MlMap | null>(null)
+  const popupRef = useRef<maplibregl.Popup | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const companyMarkerRef = useRef<maplibregl.Marker | null>(null)
   const {
@@ -217,21 +267,19 @@ export function MapView() {
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const apply = () => {
+    whenLayersReady(map, () => {
       const source = map.getSource('listings') as
         | maplibregl.GeoJSONSource
         | undefined
       source?.setData(listingsToGeoJSON(results, favorites))
-    }
-    if (map.isStyleLoaded()) apply()
-    else map.once('load', apply)
+    })
   }, [results, favorites])
 
   // Update isochrone.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const apply = () => {
+    whenLayersReady(map, () => {
       const source = map.getSource('isochrone') as
         | maplibregl.GeoJSONSource
         | undefined
@@ -249,9 +297,7 @@ export function MapView() {
             }
           : { type: 'FeatureCollection', features: [] },
       )
-    }
-    if (map.isStyleLoaded()) apply()
-    else map.once('load', apply)
+    })
   }, [isochrone])
 
   // Company marker.
@@ -280,17 +326,59 @@ export function MapView() {
     }
   }, [selectedListingId, results])
 
-  // Highlight hovered listing.
+  // Highlight the selected / hovered listing.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.getLayer('listing-points')) return
-    map.setPaintProperty('listing-points', 'circle-radius', [
-      'case',
-      ['==', ['get', 'id'], hoveredListingId ?? ''],
-      12,
-      8,
-    ])
-  }, [hoveredListingId])
+    if (!map) return
+    whenLayersReady(map, () => {
+      const selected = selectedListingId ?? ''
+      map.setPaintProperty('listing-points', 'circle-radius', [
+        'case',
+        ['==', ['get', 'id'], selected],
+        14,
+        ['==', ['get', 'id'], hoveredListingId ?? ''],
+        12,
+        8,
+      ])
+      map.setPaintProperty('listing-points', 'circle-stroke-color', [
+        'case',
+        ['==', ['get', 'id'], selected],
+        '#1f2937',
+        '#ffffff',
+      ])
+      map.setPaintProperty('listing-points', 'circle-stroke-width', [
+        'case',
+        ['==', ['get', 'id'], selected],
+        3,
+        2,
+      ])
+    })
+  }, [hoveredListingId, selectedListingId])
+
+  // Key facts popup for the selected listing.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const listing = results.find((l) => l.id === selectedListingId)
+    if (!listing) {
+      popupRef.current?.remove()
+      popupRef.current = null
+      return
+    }
+    const popup =
+      popupRef.current ??
+      new maplibregl.Popup({
+        closeButton: true,
+        closeOnClick: false,
+        offset: 14,
+        maxWidth: '280px',
+      })
+    popup
+      .setLngLat([listing.lng, listing.lat])
+      .setHTML(popupHtml(listing, locale))
+      .addTo(map)
+    popupRef.current = popup
+  }, [selectedListingId, results, locale])
 
   return (
     <div className="relative h-full w-full">
