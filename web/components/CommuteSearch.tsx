@@ -98,7 +98,7 @@ export default function CommuteSearch() {
         勤務先の住所と通勤条件から、通える駅の候補を探します。
       </p>
 
-      <form className={styles.form} onSubmit={onSearch}>
+      <form className={styles.form} onSubmit={onSearch} noValidate>
         <label className={styles.field}>
           <span>勤務先の住所</span>
           <input
