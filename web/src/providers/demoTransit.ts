@@ -8,8 +8,10 @@ import type {
   RouteInput,
   RouteLeg,
   RouteResult,
+  RouteShape,
   TravelMode,
 } from '../lib/types'
+import type { Position } from 'geojson'
 import { DEMO_STATIONS, DEMO_STATION_EDGES } from '../data/demoStations'
 import { shortestPath } from '../lib/dijkstra'
 import { circlePolygon, estimateMinutes, estimateRadiusKm, haversineKm } from '../lib/geo'
@@ -19,6 +21,14 @@ import {
   SPEED_KMH,
 } from '../lib/config'
 import { DEMO_PLACES } from '../data/demoPlaces'
+
+function stationCoords(ids: string[]): Position[] {
+  const byId = new Map(DEMO_STATIONS.map((s) => [s.id, s]))
+  return ids
+    .map((id) => byId.get(id))
+    .filter((s): s is (typeof DEMO_STATIONS)[number] => s != null)
+    .map((s) => [s.lng, s.lat] as Position)
+}
 
 function nearestStation(p: LatLng) {
   let best = DEMO_STATIONS[0]
@@ -93,6 +103,19 @@ export class DemoTransitProvider implements CommuteProvider {
           provider: 'demo',
           isEstimated: true,
           computedAt: now,
+          shape: {
+            walk: [
+              [
+                [input.origin.lng, input.origin.lat],
+                [from.station.lng, from.station.lat],
+              ],
+              [
+                [to.station.lng, to.station.lat],
+                [input.destination.lng, input.destination.lat],
+              ],
+            ],
+            transit: [stationCoords(path.stations)],
+          },
         }
       }
       // Same nearest station or unreachable: walk estimate.
@@ -107,6 +130,7 @@ export class DemoTransitProvider implements CommuteProvider {
         provider: 'demo',
         isEstimated: true,
         computedAt: now,
+        shape: straightShape(input, 'walk'),
       }
     }
     const minutes = estimateMinutes(input.origin, input.destination, input.mode)
@@ -120,6 +144,10 @@ export class DemoTransitProvider implements CommuteProvider {
       provider: 'demo',
       isEstimated: true,
       computedAt: now,
+      shape: straightShape(
+        input,
+        input.mode === 'walk' ? 'walk' : 'transit',
+      ),
     }
   }
 
@@ -148,6 +176,20 @@ export class DemoTransitProvider implements CommuteProvider {
       computedAt: new Date().toISOString(),
     }
   }
+}
+
+/** Straight origin/destination line for estimated (non-routed) modes. */
+function straightShape(
+  input: RouteInput,
+  kind: 'walk' | 'transit',
+): RouteShape {
+  const line: Position[] = [
+    [input.origin.lng, input.origin.lat],
+    [input.destination.lng, input.destination.lat],
+  ]
+  return kind === 'walk'
+    ? { walk: [line], transit: [] }
+    : { walk: [], transit: [line] }
 }
 
 function modeLegKind(mode: TravelMode): RouteLeg['kind'] {

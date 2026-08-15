@@ -6,6 +6,17 @@ import {
   formatMinutes,
   formatYen,
 } from '../lib/format'
+import type { RouteLeg } from '../lib/types'
+
+const LEG_ICON: Record<RouteLeg['kind'], string> = {
+  walk: '🚶',
+  train: '🚃',
+  bus: '🚌',
+  car: '🚗',
+  bicycle: '🚲',
+  wait: '⏳',
+  transfer: '🔁',
+}
 
 export function ListingDetail() {
   const {
@@ -101,13 +112,13 @@ export function ListingDetail() {
             <ul className="mt-1 space-y-0.5 text-xs text-gray-700">
               {listing.commute.legs.map((leg, i) => (
                 <li key={i}>
-                  {leg.kind === 'walk' && '🚶'}
-                  {leg.kind === 'train' && '🚃'}
-                  {leg.kind === 'bus' && '🚌'}
-                  {leg.kind === 'car' && '🚗'}
-                  {leg.kind === 'bicycle' && '🚲'}{' '}
-                  {leg.lineName ?? leg.toName ?? leg.fromName ?? ''}{' '}
+                  {LEG_ICON[leg.kind] ?? '·'} {leg.lineName ?? ''}{' '}
                   {formatMinutes(leg.minutes)}
+                  {(leg.fromName || leg.toName) && (
+                    <span className="text-gray-500">
+                      （{leg.fromName ?? '?'} → {leg.toName ?? '?'}）
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

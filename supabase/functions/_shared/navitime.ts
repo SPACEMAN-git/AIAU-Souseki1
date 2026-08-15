@@ -17,6 +17,14 @@ export interface RouteLeg {
   toName?: string
 }
 
+export type Coordinates = [number, number][]
+
+/** Route line split by travel kind so the map can style each part. */
+export interface RouteShape {
+  walk: Coordinates[]
+  transit: Coordinates[]
+}
+
 export interface RouteResult {
   durationMinutes: number
   walkingMinutes: number
@@ -27,6 +35,7 @@ export interface RouteResult {
   provider: string
   isEstimated: boolean
   computedAt: string
+  shape?: RouteShape
 }
 
 const DEFAULT_HOST = 'navitime-route-totalnavi.p.rapidapi.com'
@@ -79,6 +88,13 @@ interface NavitimeSection {
   transport?: { name?: string }
 }
 
+interface NavitimeShapes {
+  features?: Array<{
+    geometry?: { type?: string; coordinates?: unknown }
+    properties?: { ways?: string }
+  }>
+}
+
 interface NavitimeItem {
   summary?: {
     move?: {
@@ -92,6 +108,41 @@ interface NavitimeItem {
     }
   }
   sections?: NavitimeSection[]
+  shapes?: NavitimeShapes
+}
+
+/** `start` / `goal` are NAVITIME's own markers, not place names. */
+function pointName(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  if (raw === 'start') return '出発地'
+  if (raw === 'goal') return '勤務地'
+  return raw
+}
+
+function shapeOf(shapes: NavitimeShapes | undefined): RouteShape | undefined {
+  const walk: Coordinates[] = []
+  const transit: Coordinates[] = []
+  for (const f of shapes?.features ?? []) {
+    if (f.geometry?.type !== 'LineString') continue
+    const raw = f.geometry.coordinates
+    if (!Array.isArray(raw)) continue
+    const line: Coordinates = []
+    for (const c of raw) {
+      if (!Array.isArray(c) || typeof c[0] !== 'number' || typeof c[1] !== 'number') {
+        continue
+      }
+      line.push([round5(c[0]), round5(c[1])])
+    }
+    if (line.length < 2) continue
+    if (f.properties?.ways === 'walk') walk.push(line)
+    else transit.push(line)
+  }
+  if (!walk.length && !transit.length) return undefined
+  return { walk, transit }
+}
+
+function round5(n: number): number {
+  return Math.round(n * 1e5) / 1e5
 }
 
 function legKind(move: string | undefined): RouteLeg['kind'] {
@@ -128,8 +179,8 @@ export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
       kind,
       minutes,
       lineName: s.transport?.name ?? s.line_name,
-      fromName: sections[i - 1]?.name,
-      toName: sections[i + 1]?.name,
+      fromName: pointName(sections[i - 1]?.name),
+      toName: pointName(sections[i + 1]?.name),
     })
   }
 
@@ -154,6 +205,7 @@ export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
     provider: 'navitime',
     isEstimated: false,
     computedAt: new Date().toISOString(),
+    shape: shapeOf(item.shapes),
   }
 }
 
@@ -170,6 +222,7 @@ export async function navitimeTransitRoute(
     start: `${origin.lat},${origin.lng}`,
     goal: `${destination.lat},${destination.lng}`,
     goal_time: nextWeekdayArrival(arrivalTime),
+    shape: 'true',
   })
   const res = await fetch(`https://${host}/route_transit?${params}`, {
     headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host },

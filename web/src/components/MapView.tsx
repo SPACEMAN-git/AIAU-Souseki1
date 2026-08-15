@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
-import type { FeatureCollection, Point } from 'geojson'
+import type { FeatureCollection } from 'geojson'
 type MlMap = maplibregl.Map
 import { useAppStore } from '../store/appStore'
 import { GSI_ATTRIBUTION, GSI_TILE_URL } from '../lib/config'
@@ -8,13 +8,8 @@ import { formatRentShort } from '../lib/format'
 import { t } from '../lib/i18n'
 import type { ListingWithCommute } from '../lib/types'
 
-function commuteColor(minutes: number | undefined): string {
-  if (minutes == null) return '#6b7280'
-  if (minutes <= 20) return '#16a34a'
-  if (minutes <= 30) return '#84cc16'
-  if (minutes <= 45) return '#f97316'
-  return '#dc2626'
-}
+const LISTING_COLOR = '#dc2626'
+const FAVORITE_COLOR = '#eab308'
 
 function listingsToGeoJSON(
   results: ListingWithCommute[],
@@ -28,12 +23,29 @@ function listingsToGeoJSON(
       properties: {
         id: l.id,
         rent: formatRentShort(l.monthlyRent),
-        color: favorites.includes(l.id)
-          ? '#eab308'
-          : commuteColor(l.commute?.durationMinutes),
+        color: favorites.includes(l.id) ? FAVORITE_COLOR : LISTING_COLOR,
       },
     })),
   }
+}
+
+/** Route line of the selected listing, split into walk / transit parts. */
+function routeToGeoJSON(listing: ListingWithCommute | undefined): FeatureCollection {
+  const shape = listing?.commute?.shape
+  if (!shape) return { type: 'FeatureCollection', features: [] }
+  const lines = (
+    [
+      ['walk', shape.walk],
+      ['transit', shape.transit],
+    ] as const
+  ).flatMap(([kind, parts]) =>
+    (parts ?? []).map((coordinates) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'LineString' as const, coordinates },
+      properties: { kind },
+    })),
+  )
+  return { type: 'FeatureCollection', features: lines }
 }
 
 export function MapView() {
@@ -93,43 +105,45 @@ export function MapView() {
         source: 'isochrone',
         paint: { 'line-color': '#3b82f6', 'line-width': 1.5, 'line-dasharray': [2, 2] },
       })
+      map.addSource('route', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      })
+      map.addLayer({
+        id: 'route-transit',
+        type: 'line',
+        source: 'route',
+        filter: ['==', ['get', 'kind'], 'transit'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#1d4ed8',
+          'line-width': 5,
+          'line-opacity': 0.85,
+        },
+      })
+      map.addLayer({
+        id: 'route-walk',
+        type: 'line',
+        source: 'route',
+        filter: ['==', ['get', 'kind'], 'walk'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#475569',
+          'line-width': 3,
+          'line-dasharray': [1.5, 1.5],
+        },
+      })
       map.addSource('listings', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
-        cluster: true,
-        clusterMaxZoom: 14,
-        clusterRadius: 48,
-      })
-      map.addLayer({
-        id: 'clusters',
-        type: 'circle',
-        source: 'listings',
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': '#6366f1',
-          'circle-radius': ['step', ['get', 'point_count'], 16, 10, 20, 30, 26],
-          'circle-opacity': 0.85,
-        },
-      })
-      map.addLayer({
-        id: 'cluster-count',
-        type: 'symbol',
-        source: 'listings',
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': '{point_count_abbreviated}',
-          'text-size': 12,
-        },
-        paint: { 'text-color': '#ffffff' },
       })
       map.addLayer({
         id: 'listing-points',
         type: 'circle',
         source: 'listings',
-        filter: ['!', ['has', 'point_count']],
         paint: {
           'circle-color': ['get', 'color'],
-          'circle-radius': 8,
+          'circle-radius': 9,
           'circle-stroke-width': 2,
           'circle-stroke-color': '#ffffff',
         },
@@ -138,7 +152,6 @@ export function MapView() {
         id: 'listing-rent',
         type: 'symbol',
         source: 'listings',
-        filter: ['!', ['has', 'point_count']],
         layout: {
           'text-field': ['get', 'rent'],
           'text-size': 10,
@@ -150,21 +163,6 @@ export function MapView() {
           'text-halo-color': '#ffffff',
           'text-halo-width': 1,
         },
-      })
-      map.on('click', 'clusters', async (e: maplibregl.MapMouseEvent) => {
-        const features = map.queryRenderedFeatures(e.point, {
-          layers: ['clusters'],
-        })
-        const clusterId = features[0]?.properties?.cluster_id
-        const source = map.getSource('listings') as maplibregl.GeoJSONSource
-        if (clusterId != null) {
-          const zoom = await source.getClusterExpansionZoom(clusterId)
-          map.easeTo({
-            center: (features[0].geometry as Point)
-              .coordinates as [number, number],
-            zoom,
-          })
-        }
       })
       map.on('click', 'listing-points', (e: maplibregl.MapLayerMouseEvent) => {
         const id = e.features?.[0]?.properties?.id as string | undefined
@@ -227,6 +225,22 @@ export function MapView() {
     else map.once('load', apply)
   }, [results, favorites])
 
+  // Draw the selected listing's route line.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => {
+      const source = map.getSource('route') as
+        | maplibregl.GeoJSONSource
+        | undefined
+      source?.setData(
+        routeToGeoJSON(results.find((l) => l.id === selectedListingId)),
+      )
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('load', apply)
+  }, [selectedListingId, results])
+
   // Update isochrone.
   useEffect(() => {
     const map = mapRef.current
@@ -287,10 +301,12 @@ export function MapView() {
     map.setPaintProperty('listing-points', 'circle-radius', [
       'case',
       ['==', ['get', 'id'], hoveredListingId ?? ''],
-      12,
-      8,
+      14,
+      ['==', ['get', 'id'], selectedListingId ?? ''],
+      13,
+      9,
     ])
-  }, [hoveredListingId])
+  }, [hoveredListingId, selectedListingId])
 
   return (
     <div className="relative h-full w-full">
@@ -329,21 +345,26 @@ function MapLegend() {
           </>
         )}
       </div>
-      <div className="mt-2 flex items-center gap-2">
-        {[
-          ['#16a34a', '≤20分'],
-          ['#84cc16', '≤30分'],
-          ['#f97316', '≤45分'],
-          ['#dc2626', '≤60分'],
-        ].map(([c, label]) => (
-          <span key={label} className="flex items-center gap-1">
-            <span
-              className="inline-block h-3 w-3 rounded-full"
-              style={{ backgroundColor: c }}
-            />
-            {label}
-          </span>
-        ))}
+      <div className="mt-2 space-y-1 text-gray-600">
+        <div className="flex items-center gap-1">
+          <span
+            className="inline-block h-3 w-3 rounded-full border border-white"
+            style={{ backgroundColor: LISTING_COLOR }}
+          />
+          {t(locale, 'listingPoint')}
+        </div>
+        <div className="flex items-center gap-1">
+          <span
+            className="inline-block h-0.5 w-5"
+            style={{ backgroundColor: '#1d4ed8' }}
+          />
+          {t(locale, 'routeTransitLine')}
+          <span
+            className="ml-2 inline-block h-0.5 w-5 border-t-2 border-dashed"
+            style={{ borderColor: '#475569' }}
+          />
+          {t(locale, 'routeWalkLine')}
+        </div>
       </div>
     </div>
   )
