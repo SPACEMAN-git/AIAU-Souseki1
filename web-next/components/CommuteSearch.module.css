@@ -1,10 +1,39 @@
 .container {
-  max-width: 640px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 40px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* デスクトップでは検索条件 + 候補駅リストと地図を並べて表示する */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 440px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (width <= 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+.mapPane {
+  position: sticky;
+  top: 16px;
+  height: 78vh;
+  min-height: 420px;
 }
 
 .title {
@@ -126,11 +155,22 @@
 
 .station {
   display: flex;
+  width: 100%;
   justify-content: space-between;
   align-items: baseline;
+  gap: 8px;
   padding: 10px 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.station:hover {
+  border-color: #2563eb;
 }
 
 .stationName {
