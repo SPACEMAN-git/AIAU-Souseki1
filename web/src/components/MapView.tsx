@@ -4,6 +4,7 @@ import type { FeatureCollection } from 'geojson'
 type MlMap = maplibregl.Map
 import { useAppStore } from '../store/appStore'
 import { GSI_ATTRIBUTION, GSI_TILE_URL } from '../lib/config'
+import { setupMaplibre } from '../lib/maplibre'
 import { formatRentShort } from '../lib/format'
 import { t } from '../lib/i18n'
 import type { ListingWithCommute } from '../lib/types'
@@ -22,6 +23,7 @@ function listingsToGeoJSON(
       geometry: { type: 'Point', coordinates: [l.lng, l.lat] },
       properties: {
         id: l.id,
+        title: l.title,
         rent: formatRentShort(l.monthlyRent),
         color: favorites.includes(l.id) ? FAVORITE_COLOR : LISTING_COLOR,
       },
@@ -52,6 +54,7 @@ export function MapView() {
   const mapRef = useRef<MlMap | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const companyMarkerRef = useRef<maplibregl.Marker | null>(null)
+  const popupRef = useRef<maplibregl.Popup | null>(null)
   const {
     locale,
     results,
@@ -69,6 +72,7 @@ export function MapView() {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
+    setupMaplibre()
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: {
@@ -88,6 +92,10 @@ export function MapView() {
       attributionControl: { compact: false },
     })
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    popupRef.current = new maplibregl.Popup({
+      closeButton: false,
+      offset: 12,
+    })
     map.on('load', () => {
       map.addSource('isochrone', {
         type: 'geojson',
@@ -148,22 +156,6 @@ export function MapView() {
           'circle-stroke-color': '#ffffff',
         },
       })
-      map.addLayer({
-        id: 'listing-rent',
-        type: 'symbol',
-        source: 'listings',
-        layout: {
-          'text-field': ['get', 'rent'],
-          'text-size': 10,
-          'text-offset': [0, 1.4],
-          'text-allow-overlap': false,
-        },
-        paint: {
-          'text-color': '#1f2937',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1,
-        },
-      })
       map.on('click', 'listing-points', (e: maplibregl.MapLayerMouseEvent) => {
         const id = e.features?.[0]?.properties?.id as string | undefined
         if (id) {
@@ -171,11 +163,18 @@ export function MapView() {
           openDetail(id)
         }
       })
-      map.on('mouseenter', 'listing-points', () => {
+      map.on('mouseenter', 'listing-points', (e: maplibregl.MapLayerMouseEvent) => {
         map.getCanvas().style.cursor = 'pointer'
+        const p = e.features?.[0]?.properties
+        if (!p) return
+        popupRef.current
+          ?.setLngLat(e.lngLat)
+          .setText(`${p.title} / ${p.rent}`)
+          .addTo(map)
       })
       map.on('mouseleave', 'listing-points', () => {
         map.getCanvas().style.cursor = ''
+        popupRef.current?.remove()
       })
     })
     mapRef.current = map
@@ -221,7 +220,7 @@ export function MapView() {
         | undefined
       source?.setData(listingsToGeoJSON(results, favorites))
     }
-    if (map.isStyleLoaded()) apply()
+    if (map.getSource('listings')) apply()
     else map.once('load', apply)
   }, [results, favorites])
 
@@ -237,7 +236,7 @@ export function MapView() {
         routeToGeoJSON(results.find((l) => l.id === selectedListingId)),
       )
     }
-    if (map.isStyleLoaded()) apply()
+    if (map.getSource('route')) apply()
     else map.once('load', apply)
   }, [selectedListingId, results])
 
@@ -264,7 +263,7 @@ export function MapView() {
           : { type: 'FeatureCollection', features: [] },
       )
     }
-    if (map.isStyleLoaded()) apply()
+    if (map.getSource('isochrone')) apply()
     else map.once('load', apply)
   }, [isochrone])
 
@@ -284,12 +283,22 @@ export function MapView() {
     }
   }, [company])
 
-  // Fly to selected listing.
+  // Show the selected listing: fit the whole route when one is available.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !selectedListingId) return
     const listing = results.find((l) => l.id === selectedListingId)
-    if (listing) {
+    if (!listing) return
+    const shape = listing.commute?.shape
+    const points = [...(shape?.walk ?? []), ...(shape?.transit ?? [])].flat()
+    if (points.length) {
+      const bounds = new maplibregl.LngLatBounds(
+        [points[0][0], points[0][1]],
+        [points[0][0], points[0][1]],
+      )
+      for (const p of points) bounds.extend([p[0], p[1]])
+      map.fitBounds(bounds, { padding: 60, maxZoom: 15 })
+    } else {
       map.flyTo({ center: [listing.lng, listing.lat], zoom: 15 })
     }
   }, [selectedListingId, results])
