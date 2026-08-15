@@ -15,7 +15,8 @@ const CACHE_TTL_HOURS = 24 * 7
 
 /**
  * Server-side single route calculation. Checks commute_cache first,
- * then calls NAVITIME (transit) or OpenRouteService (walk/bicycle/car)
+ * then calls NAVITIME (transit, and walking via its door-to-door
+ * candidate) or OpenRouteService (bicycle/car, walking fallback)
  * when the corresponding API keys are configured as function secrets.
  * Returns 503 provider_unavailable when no provider key is set so the
  * frontend can fall back to demo estimation.
@@ -46,11 +47,14 @@ Deno.serve(async (req) => {
 
     let result: Record<string, unknown> | null = null
 
-    if (isTransit && navitimeKey()) {
+    const walkOnly = body.mode === 'walk'
+
+    if ((isTransit || walkOnly) && navitimeKey()) {
       result = (await navitimeTransitRoute(
         body.origin,
         body.destination,
         body.arrivalTime,
+        walkOnly,
       )) as unknown as Record<string, unknown> | null
     } else if (!isTransit && orsKey) {
       const profile =

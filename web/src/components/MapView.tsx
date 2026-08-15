@@ -118,6 +118,14 @@ export function MapView() {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
+      // White casing keeps the route readable on the busy GSI basemap.
+      map.addLayer({
+        id: 'route-casing',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 },
+      })
       map.addLayer({
         id: 'route-transit',
         type: 'line',
@@ -137,9 +145,9 @@ export function MapView() {
         filter: ['==', ['get', 'kind'], 'walk'],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': '#475569',
-          'line-width': 3,
-          'line-dasharray': [1.5, 1.5],
+          'line-color': '#0f172a',
+          'line-width': 4,
+          'line-dasharray': [1.4, 1.1],
         },
       })
       map.addSource('listings', {
