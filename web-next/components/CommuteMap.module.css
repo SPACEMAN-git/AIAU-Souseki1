@@ -39,17 +39,19 @@
   cursor: pointer;
 }
 
-/* 通勤時間の強弱は opacity だけで表す（色とサイズは固定） */
+/* 通勤時間の強弱は opacity だけで表す（色とサイズは固定）。
+   MapLibre の Marker は marker 要素の style.opacity を常に "1" で上書きするため
+   !important が必要。 */
 .level1 {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .level2 {
-  opacity: 0.75;
+  opacity: 0.75 !important;
 }
 
 .level3 {
-  opacity: 0.5;
+  opacity: 0.5 !important;
 }
 
 /* 勤務先から徒歩圏内の主要起点駅。駅名ラベルを常時表示する */
@@ -61,7 +63,7 @@
   border-radius: 5px;
   background: var(--primary-station);
   box-shadow: var(--shadow-2);
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .accessLabel {
@@ -83,17 +85,17 @@
 /* 路線選択中: 沿線の候補駅を強調し、それ以外は視覚優先度を下げる */
 .onLineMarker {
   box-shadow: 0 0 0 2px rgb(17 24 39 / 25%);
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .offLineMarker {
-  opacity: 0.25;
+  opacity: 0.25 !important;
 }
 
 /* 勤務先と主要起点駅は路線選択の影響を受けない */
 .workplaceMarker.offLineMarker,
 .accessMarker.offLineMarker {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .popup {

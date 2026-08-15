@@ -29,6 +29,19 @@ const ACCESS_WALK_LIMIT = 15;
 const ACCESS_MAX = 3;
 const EXAMPLE_ADDRESS = "東京都千代田区丸の内1-9-1";
 
+// 上流（RapidAPI / Edge Function）の生エラーは利用者に見せず、console に残す
+function userMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  console.error(raw);
+  if (/\b429\b|quota/i.test(raw)) {
+    return "現在アクセスが集中しています。しばらくしてからもう一度お試しください。";
+  }
+  if (/\b5\d\d\b|upstream_error/i.test(raw)) {
+    return "経路情報の取得に失敗しました。しばらくしてからもう一度お試しください。";
+  }
+  return raw;
+}
+
 export default function CommuteSearch() {
   const [address, setAddress] = useState("");
   const [term, setTerm] = useState("30");
@@ -65,7 +78,7 @@ export default function CommuteSearch() {
       }
     } catch (err) {
       setSelectedLine(null);
-      setLineError(err instanceof Error ? err.message : String(err));
+      setLineError(userMessage(err));
     } finally {
       setLineLoadingId(null);
     }
@@ -169,8 +182,7 @@ export default function CommuteSearch() {
         setLineGroups(lines?.data.stations ?? []);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setStatus({ kind: "error", message });
+      setStatus({ kind: "error", message: userMessage(err) });
     }
   }
 
