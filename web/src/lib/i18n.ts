@@ -88,8 +88,8 @@ const dict = {
   dataSource: { ja: 'データ提供', zh: '数据来源' },
   loading: { ja: '検索中…', zh: '搜索中…' },
   geocodeAddress: {
-    ja: '住所から座標を検索（Geocoding.jp）',
-    zh: '将地址转换为坐标（Geocoding.jp）',
+    ja: '住所・地名から座標を検索',
+    zh: '将地址/地名转换为坐标',
   },
   geocodeLoading: { ja: '住所を変換中…', zh: '正在转换地址…' },
   geocodeNoResult: {
