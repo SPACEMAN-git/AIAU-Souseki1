@@ -23,9 +23,12 @@
 
 ```
 web/       Vite + React + TypeScript フロントエンド（MapLibre GL JS / Zustand / Tailwind CSS v4）
+web-next/  Next.js (App Router) + TypeScript フロントエンド（NAVITIME 通勤検索 UI・`docs/architecture.md` 参照）
 supabase/  PostgreSQL + PostGIS マイグレーション・seed・Edge Functions
 data/      物件 CSV インポートテンプレート
 ```
+
+2 つのフロントエンドが並存しています。`web/` と `web-next/` は独立に `npm install` / `npm run dev` します（`web-next/` の手順は `web-next/README.md`）。
 
 | 役割 | 使用しているもの |
 | --- | --- |
