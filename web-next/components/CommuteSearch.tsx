@@ -63,7 +63,7 @@ export default function CommuteSearch() {
       setStatus({
         kind: "error",
         message:
-          "API の接続先が未設定です。web/.env.local に NEXT_PUBLIC_SUPABASE_URL か NEXT_PUBLIC_NAVITIME_PROXY_URL を設定してください。",
+          "API の接続先が未設定です。web-next/.env.local に NEXT_PUBLIC_SUPABASE_URL か NEXT_PUBLIC_NAVITIME_PROXY_URL を設定してください。",
       });
       return;
     }
