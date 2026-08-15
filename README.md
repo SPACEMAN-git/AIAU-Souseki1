@@ -31,7 +31,7 @@ data/      物件 CSV インポートテンプレート
 | --- | --- |
 | 地図タイル | 国土地理院（GSI）淡色地図（無料・キー不要、出典表示あり） |
 | 物件検索 | Supabase PostgreSQL + PostGIS（`search_listings_in_radius` RPC） |
-| 場所検索（勤務地） | NAVITIME（駅・スポット）→ NAVITIME 住所検索 → Geocoding.jp の順にフォールバック |
+| 場所検索（勤務地） | NAVITIME（駅名・住所、部分一致で複数候補）→ OSM Nominatim（施設・建物名）→ Geocoding.jp（完全な住所）の順に補完。入力途中でも候補を提示します |
 | 経路・所要時間 | NAVITIME `route_transit`（RapidAPI 経由、公共交通・徒歩）／自転車・自動車は OpenRouteService（任意）／いずれも失敗時はデモ推定 |
 | API キーの保護 | すべて Supabase Edge Function の secret。ブラウザには渡しません |
 
@@ -123,5 +123,6 @@ npx tsx scripts/generateSeed.ts  # supabase/seed.sql 再生成
 
 - 地図タイル: [国土地理院](https://maps.gsi.go.jp/development/ichiran.html)
 - 経路・場所検索: NAVITIME（RapidAPI 経由の正規 API）
+- 施設・建物名の候補: [OpenStreetMap Nominatim](https://operations.osmfoundation.org/policies/nominatim/)（無料・キー不要、1 req/s 目安。候補が少ないときのみ呼び出し、結果は `places` にキャッシュ）
 - 住所ジオコーディング（フォールバック）: Geocoding.jp（約 10 秒に 1 リクエストの制限あり、キャッシュ必須）
 - 物件データ: 架空のデモデータ（Demo Seed Data）。実物件データを扱う場合は提供元のライセンス条件に従ってください。

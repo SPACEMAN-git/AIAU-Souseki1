@@ -3,8 +3,8 @@ export type Locale = 'ja' | 'zh'
 const dict = {
   appTitle: { ja: 'SUUMAP', zh: 'SUUMAP' },
   searchPlaceholder: {
-    ja: '会社名・住所・駅名を入力',
-    zh: '输入公司名、地址或车站名',
+    ja: '住所・駅名・施設名（一部でも OK）',
+    zh: '输入地址 / 车站 / 建筑名（可只输入一部分）',
   },
   searchButton: { ja: '物件を検索', zh: '搜索房源' },
   commuteMode: { ja: '通勤手段', zh: '通勤方式' },
@@ -99,6 +99,10 @@ const dict = {
   geocodeNoResult: {
     ja: '住所を変換できませんでした。表記を変えてお試しください。',
     zh: '无法转换该地址，请更换写法后重试。',
+  },
+  suggestEmpty: {
+    ja: '候補がありません。短めのキーワード（例:「西新宿2」「上野」）でお試しください。',
+    zh: '没有候选。请试更短的关键词（如“西新宿2”“上野”）。',
   },
 } as const
 
