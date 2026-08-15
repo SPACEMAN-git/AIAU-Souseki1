@@ -1,0 +1,49 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/deploy-pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx vite build --base=/AIAU-Souseki1/
+        working-directory: web
+        env:
+          VITE_SUPABASE_URL: https://qruwjheirllgemiqjmig.supabase.co
+          # Publishable (anon) key: safe to expose in the browser bundle
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable__3diCj3mywm6L1_d0fG0jw_1mH1VYAa
+          VITE_DEMO_MODE: 'false'
+      - run: cp web/dist/index.html web/dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
