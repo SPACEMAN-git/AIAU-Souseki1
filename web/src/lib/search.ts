@@ -177,16 +177,15 @@ export async function runCommuteSearch(
 
   let isochrone: IsochroneResult | null = null
   try {
-    isochrone = await withFallback(
-      conditions.mode,
-      (p) =>
-        p.calculateIsochrone({
-          center: company,
-          mode: conditions.mode,
-          timeLimitMinutes: conditions.maxMinutes,
-          arrivalTime: conditions.arrivalTime,
-        }),
-      onFallback,
+    // The isochrone is only a prefilter, so falling back to the demo
+    // polygon here does not make the commute times estimated.
+    isochrone = await withFallback(conditions.mode, (p) =>
+      p.calculateIsochrone({
+        center: company,
+        mode: conditions.mode,
+        timeLimitMinutes: conditions.maxMinutes,
+        arrivalTime: conditions.arrivalTime,
+      }),
     )
   } catch {
     isochrone = null
