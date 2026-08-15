@@ -5,8 +5,9 @@ type MlMap = maplibregl.Map
 import { useAppStore } from '../store/appStore'
 import { GSI_ATTRIBUTION, GSI_TILE_URL } from '../lib/config'
 import { setupMaplibre } from '../lib/maplibre'
-import { formatRentShort } from '../lib/format'
+import { formatMinutes, formatRentShort, formatYen } from '../lib/format'
 import { t } from '../lib/i18n'
+import type { Locale } from '../lib/i18n'
 import type { ListingWithCommute } from '../lib/types'
 
 const LISTING_COLOR = '#dc2626'
@@ -21,6 +22,39 @@ const PILL_CLASS =
 export function rentPillLabel(yen: number): string {
   const man = yen / 10000
   return `${Number.isInteger(man) ? man : man.toFixed(1)}万`
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c,
+  )
+}
+
+/** Compact key facts shown in the map popup of a listing. */
+function popupHtml(listing: ListingWithCommute, locale: Locale): string {
+  const commute = listing.commute
+  const rows = [
+    `${listing.layout}・${listing.floorArea}m²・${t(locale, 'buildingAge')}${listing.buildingAge}`,
+    `${listing.nearestStationName}・${t(locale, 'stationWalk')}${listing.walkMinutesToStation}分`,
+    commute
+      ? `${t(locale, 'commuteTime')} ${formatMinutes(commute.durationMinutes)}・${t(locale, 'transfers')}${commute.transferCount}${
+          commute.isEstimated ? `（${t(locale, 'estimated')}）` : ''
+        }`
+      : null,
+  ].filter((r): r is string => r != null)
+  return `<div style="min-width:11rem">
+    <div style="font-weight:600;font-size:0.875rem">${escapeHtml(listing.title)}</div>
+    <div style="font-weight:700;font-size:1rem;color:#4338ca;margin:2px 0 4px">${escapeHtml(
+      formatYen(listing.monthlyRent),
+    )}</div>
+    ${rows
+      .map(
+        (r) =>
+          `<div style="font-size:0.75rem;color:#4b5563">${escapeHtml(r)}</div>`,
+      )
+      .join('')}
+  </div>`
 }
 
 /** Route line of the selected listing, split into walk / transit parts. */
@@ -47,6 +81,8 @@ export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const companyMarkerRef = useRef<maplibregl.Marker | null>(null)
   const markersRef = useRef(new Map<string, maplibregl.Marker>())
+  const hoverPopupRef = useRef<maplibregl.Popup | null>(null)
+  const selectedPopupRef = useRef<maplibregl.Popup | null>(null)
   const {
     locale,
     results,
@@ -62,6 +98,10 @@ export function MapView() {
     setMapPickMode,
     setCompany,
   } = useAppStore()
+
+  // Marker handlers are registered once per render, so read the latest locale via a ref.
+  const localeRef = useRef(locale)
+  localeRef.current = locale
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -144,6 +184,8 @@ export function MapView() {
     return () => {
       map.remove()
       mapRef.current = null
+      selectedPopupRef.current = null
+      hoverPopupRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -191,9 +233,21 @@ export function MapView() {
         selectListing(l.id)
         openDetail(l.id)
       })
-      el.addEventListener('mouseenter', () => hoverListing(l.id))
+      el.addEventListener('mouseenter', () => {
+        hoverListing(l.id)
+        if (l.id === selectedListingId) return
+        hoverPopupRef.current ??= new maplibregl.Popup({
+          closeButton: false,
+          offset: 16,
+        })
+        hoverPopupRef.current
+          .setLngLat([l.lng, l.lat])
+          .setHTML(popupHtml(l, localeRef.current))
+          .addTo(map)
+      })
       el.addEventListener('mouseleave', () => {
         if (useAppStore.getState().hoveredListingId === l.id) hoverListing(null)
+        hoverPopupRef.current?.remove()
       })
       markersRef.current.set(
         l.id,
@@ -205,8 +259,16 @@ export function MapView() {
     return () => {
       for (const m of markersRef.current.values()) m.remove()
       markersRef.current.clear()
+      hoverPopupRef.current?.remove()
     }
-  }, [results, favorites, selectListing, openDetail, hoverListing])
+  }, [
+    results,
+    favorites,
+    selectListing,
+    openDetail,
+    hoverListing,
+    selectedListingId,
+  ])
 
   // Draw the selected listing's route line.
   useEffect(() => {
@@ -286,6 +348,26 @@ export function MapView() {
       map.flyTo({ center: [listing.lng, listing.lat], zoom: 15 })
     }
   }, [selectedListingId, results])
+
+  // Keep a key-facts popup pinned on the selected listing.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const listing = results.find((l) => l.id === selectedListingId)
+    if (!listing) {
+      selectedPopupRef.current?.remove()
+      return
+    }
+    selectedPopupRef.current ??= new maplibregl.Popup({
+      closeButton: true,
+      offset: 16,
+      closeOnClick: false,
+    })
+    selectedPopupRef.current
+      .setLngLat([listing.lng, listing.lat])
+      .setHTML(popupHtml(listing, locale))
+      .addTo(map)
+  }, [selectedListingId, results, locale])
 
   // Highlight hovered / selected listing pills. Hovering must not restack or
   // resize a pill: moving it out from under the cursor would flip the hover

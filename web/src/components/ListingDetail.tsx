@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import { t } from '../lib/i18n'
 import {
@@ -29,6 +30,16 @@ export function ListingDetail() {
     compareIds,
     toggleCompare,
   } = useAppStore()
+
+  useEffect(() => {
+    if (!detailListingId) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') openDetail(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [detailListingId, openDetail])
+
   const listing = results.find((l) => l.id === detailListingId)
   if (!listing) return null
   const fav = favorites.includes(listing.id)
@@ -42,18 +53,44 @@ export function ListingDetail() {
     (monthlyCommuteCost ?? 0)
 
   return (
-    <div className="absolute top-0 right-0 z-30 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-gray-200 bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-        <h2 className="text-base font-bold">{listing.title}</h2>
+    <aside className="absolute inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-2xl">
+      <div className="flex items-start justify-between gap-2 border-b border-gray-200 px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-base font-bold">{listing.title}</h2>
+          <p className="truncate text-xs text-gray-500">{listing.address}</p>
+        </div>
         <button
           type="button"
-          className="rounded px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
+          className="shrink-0 rounded px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
           onClick={() => openDetail(null)}
         >
           ✕ {t(locale, 'close')}
         </button>
       </div>
-      <div className="flex-1 space-y-4 p-4 text-sm">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-gray-200 bg-indigo-50/60 px-4 py-3">
+        <span className="text-2xl font-bold text-indigo-700">
+          {formatYen(listing.monthlyRent)}
+        </span>
+        <span className="text-xs text-gray-600">
+          +{formatYen(listing.managementFee)}
+        </span>
+        <span className="text-sm text-gray-700">
+          {listing.layout}・{formatArea(listing.floorArea)}・築
+          {listing.buildingAge}年
+        </span>
+        {listing.commute && (
+          <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
+            {t(locale, 'commuteTime')}{' '}
+            {formatMinutes(listing.commute.durationMinutes)}
+          </span>
+        )}
+        {listing.score != null && (
+          <span className="rounded bg-white px-2 py-0.5 text-xs text-gray-700 ring-1 ring-gray-200">
+            {t(locale, 'score')} {listing.score}/100
+          </span>
+        )}
+      </div>
+      <div className="flex-1 space-y-4 overflow-y-auto p-4 text-sm">
         {listing.isDemo && (
           <div className="rounded bg-gray-100 px-3 py-2 text-xs text-gray-600">
             {t(locale, 'demoData')} — {listing.sourceName}
@@ -72,8 +109,6 @@ export function ListingDetail() {
           )}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <Info label={t(locale, 'rent')} value={formatYen(listing.monthlyRent)} strong />
-          <Info label={t(locale, 'managementFee')} value={formatYen(listing.managementFee)} />
           <Info label={t(locale, 'deposit')} value={formatYen(listing.deposit)} />
           <Info label={t(locale, 'keyMoney')} value={formatYen(listing.keyMoney)} />
           <Info label={t(locale, 'layout')} value={listing.layout} />
@@ -81,6 +116,10 @@ export function ListingDetail() {
           <Info
             label={t(locale, 'buildingAge')}
             value={`築${listing.buildingAge}年（${listing.builtYear}年）`}
+          />
+          <Info
+            label={t(locale, 'stationWalk')}
+            value={`${listing.nearestStationName} 徒歩${listing.walkMinutesToStation}分`}
           />
           <Info
             label="階"
@@ -155,8 +194,8 @@ export function ListingDetail() {
           </div>
         )}
         {listing.score != null && (
-          <div>
-            <div className="text-xs text-gray-500">
+          <div className="rounded-lg border border-gray-200 p-3">
+            <div className="text-xs font-semibold text-gray-700">
               {t(locale, 'score')}: {listing.score}/100
             </div>
             {listing.scoreReasons && listing.scoreReasons.length > 0 && (
@@ -221,25 +260,15 @@ export function ListingDetail() {
           {t(locale, 'updatedAt')}: {formatDate(listing.updatedAt, locale)}
         </div>
       </div>
-    </div>
+    </aside>
   )
 }
 
-function Info({
-  label,
-  value,
-  strong,
-}: {
-  label: string
-  value: string
-  strong?: boolean
-}) {
+function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-xs text-gray-500">{label}</div>
-      <div className={strong ? 'text-lg font-bold text-indigo-700' : ''}>
-        {value}
-      </div>
+      <div>{value}</div>
     </div>
   )
 }

@@ -117,13 +117,13 @@ export default function App() {
                 </span>
               </div>
             )}
-            <ListingDetail />
             <CompareDrawer />
             <DebugPanel />
           </div>
           <div className="min-h-0 flex-[2] border-t border-gray-200">
             <ListingList />
           </div>
+          <ListingDetail />
         </main>
       </div>
     </div>
