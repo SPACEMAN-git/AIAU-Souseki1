@@ -33,7 +33,26 @@ export async function invokeEdge<T>(
     body: body as Record<string, unknown>,
   })
   if (error) {
-    throw { code: 'edge_error', message: error.message ?? String(error) }
+    throw {
+      code: (await errorReason(error)) ?? 'edge_error',
+      message: error.message ?? String(error),
+    }
   }
   return data as T
+}
+
+/**
+ * supabase-js only exposes the HTTP status in the error message, so the
+ * function's JSON body is read to recover why it failed (e.g. the
+ * NAVITIME monthly quota being spent).
+ */
+async function errorReason(error: unknown): Promise<string | null> {
+  const res = (error as { context?: Response }).context
+  if (!(res instanceof Response)) return null
+  try {
+    const body = (await res.clone().json()) as { reason?: string }
+    return typeof body.reason === 'string' ? body.reason : null
+  } catch {
+    return null
+  }
 }

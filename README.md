@@ -1,46 +1,74 @@
-# 通勤圏さがし（Souseki）
+# SUUMAP
 
-勤務地・通勤手段・最大通勤時間から、条件を満たす賃貸物件を「地図＋リスト」で探せる Web アプリの MVP です。仕様は `prompt.md` を参照してください。
+**「通勤時間で賃貸を探す」ための Web アプリ**です。SUUMO のような賃貸物件検索と、Google マップのような経路探索・地図表示を 1 つの画面に統合し、*勤務地からの通勤時間*を軸に物件を絞り込めるようにしたものです。
 
-**現在バンドルされている物件データはすべて架空のデモデータです（`is_demo = true`）。実在の物件ではありません。**
+- SUUMO 的な部分: 家賃・間取り・面積・築年数・駅徒歩・設備などによる物件検索とリスト表示
+- Google マップ的な部分: 勤務地の地名／住所検索、通勤到達圏の可視化、物件から勤務地までの実経路（乗換・所要時間・運賃）と地図上への経路描画
 
-## 構成
+一般的な物件サイトは「駅からの徒歩分数」までしか扱えませんが、SUUMAP は「自分の勤務地まで実際に何分で行けるか」を検索条件そのものにします。
+
+> ⚠️ 現在バンドルされている物件データはすべて**架空のデモデータ**です（`is_demo = true`）。実在の物件ではありません。実データは正規のライセンス取得後に `import-listings` で投入する想定です。
+
+仕様の原文は `prompt.md` を参照してください。
+
+## 使い方（ユーザー視点の流れ）
+
+1. 勤務地を入力する（会社名・駅名・地名・住所のいずれか。地図クリックでも指定可）
+2. 通勤手段（公共交通／徒歩＋公共交通／徒歩／自転車／自動車）、最大通勤時間、到着時刻を選ぶ
+3. 家賃・間取り・面積などで絞り込む
+4. 条件を満たす物件が**地図上の赤い点＋右側のリスト**に表示される
+5. 物件をクリックすると、通勤経路の概要（乗車駅→降車駅・路線名・各区間の分数・運賃）と地図上の経路線（実線＝乗車、破線＝徒歩）が表示される
+
+## アーキテクチャ
 
 ```
-web/       Vite + React + TypeScript フロントエンド
+web/       Vite + React + TypeScript フロントエンド（MapLibre GL JS / Zustand / Tailwind CSS v4）
 web-next/  Next.js (App Router) + TypeScript フロントエンド（NAVITIME 通勤検索 UI・`docs/architecture.md` 参照）
-supabase/  PostgreSQL/PostGIS マイグレーション・seed・Edge Functions
+supabase/  PostgreSQL + PostGIS マイグレーション・seed・Edge Functions
 data/      物件 CSV インポートテンプレート
 ```
 
 2 つのフロントエンドが並存しています。`web/` と `web-next/` は独立に `npm install` / `npm run dev` します（`web-next/` の手順は `web-next/README.md`）。
 
-- 地図: MapLibre GL JS ＋ 国土地理院（GSI）淡色地図タイル（出典表示あり）
-- 状態管理: Zustand / スタイル: Tailwind CSS v4
-- 経路計算 Provider 抽象: NAVITIME / OpenRouteService（Edge Function 経由）→ Demo 推定へフォールバック
-- デモ公共交通: 都内の駅ネットワーク＋ダイクストラ法による**推定**（実時刻表ではありません。UI に「推定」表示）
+| 役割 | 使用しているもの |
+| --- | --- |
+| 地図タイル | 国土地理院（GSI）淡色地図（無料・キー不要、出典表示あり） |
+| 物件検索 | Supabase PostgreSQL + PostGIS（`search_listings_in_radius` RPC） |
+| 場所検索（勤務地） | NAVITIME（駅・スポット）→ NAVITIME 住所検索 → Geocoding.jp の順にフォールバック |
+| 経路・所要時間 | NAVITIME `route_transit`（RapidAPI 経由、公共交通・徒歩）／自転車・自動車は OpenRouteService（任意）／いずれも失敗時はデモ推定 |
+| API キーの保護 | すべて Supabase Edge Function の secret。ブラウザには渡しません |
 
-## クイックスタート（デモモード・API キー不要）
+検索は 5 段階の階層型で、外部 API の呼び出し回数を最小化しています。
+
+1. 交通手段×最大時間から検索半径を推定
+2. 半径プレフィルタ（PostGIS RPC。Supabase 未接続時はローカル haversine）
+3. 到達圏ポリゴンで絞り込み（point-in-polygon）
+4. Provider チェーンでバッチ経路検証（`commute_cache` ＋セッション内キャッシュ）
+5. 最大通勤時間・乗換数・駅徒歩で最終フィルタ → 0〜100 のおすすめスコア算出（根拠付き）
+
+## NAVITIME の利用上限とテスト時のルール
+
+NAVITIME（RapidAPI `navitime-route-totalnavi`）は現在 **BASIC プラン＝月 500 リクエスト**で、バッチ経路 API が存在しません。つまり未キャッシュの物件 1 件ごとに 1 リクエストを消費します。無計画に検索すると数回で月間上限を使い切ってしまうため、以下を守ってください。
+
+- **1 回の検索（＝テスト 1 回）で消費する NAVITIME 呼び出しは最大 20 件**。`NAVITIME_MAX_CALLS_PER_REQUEST` の既定値が `20` で、`calculate-commute-batch` が超過分を打ち切ります。
+- 上限を超える候補は勤務地に**近い順**に 20 件まで実経路を取得し、残り（遠く、通勤時間上限を超える可能性が高い物件）は結果から除外します。全件をデモ推定に落とすことはしません。
+- 経路結果は `commute_cache` に **TTL 30 日**で保存されます。同じ条件の再検索は API を消費しません。テストは「新規条件の検索は 1 回だけ、以降はキャッシュで確認」を原則にしてください。
+- 月間上限に達すると RapidAPI は 429 を返します。この場合 Edge Function は `503 { error: 'provider_unavailable', reason: 'quota_exceeded' }` を返し、フロントは**デモ推定モード**へ降級して「NAVITIME の月間利用上限に達したため、経路と所要時間はデモ推定です」というバナーを表示します。デモ推定は駅ネットワーク＋ダイクストラ法による概算なので、地図上の経路はほぼ直線になり、最短経路とも一致しません（不具合ではありません）。
+- NAVITIME の Web ページのスクレイピングは行いません。
+
+## セットアップ
+
+### デモモード（API キー不要）
 
 ```bash
 cd web
 npm install
-npm run dev
+npm run dev      # http://localhost:5173/
 ```
 
 `.env` なしで動作します（`VITE_DEMO_MODE=true` 相当）。80 件の架空物件・デモ駅ネットワークで全機能を試せます。
 
-住所→座標変換（Geocoding.jp）: 検索欄に住所を入力して Enter（または候補内のボタン）で座標に変換できます。Supabase 接続時は Edge Function `geocode-place` 経由、未接続の開発時は Vite dev プロキシ `/geocoding-api` 経由で直接呼び出します（約 10 秒に 1 リクエストの制限をクライアント側でも遵守）。
-
-## 検索アルゴリズム（階層型）
-
-1. 交通手段×最大時間から検索半径を推定
-2. 半径プレフィルタ（Supabase 接続時は PostGIS RPC `search_listings_in_radius`、未接続時はローカル haversine）
-3. 到達圏ポリゴンで絞り込み（point-in-polygon）
-4. Provider チェーンでバッチ経路検証（セッション内キャッシュあり）
-5. 最大通勤時間・乗換数・駅徒歩で最終フィルタ → 0〜100 のおすすめスコア算出（根拠付き）
-
-## Supabase を使う場合
+### Supabase に接続する
 
 ```bash
 supabase db push          # supabase/migrations/0001_init.sql
@@ -58,14 +86,24 @@ VITE_DEMO_MODE=false
 
 ### API キー（サーバー側のみ）
 
-第三者 API キーはブラウザに一切渡しません。Edge Function の secret として設定します:
-
 ```bash
-supabase secrets set NAVITIME_API_KEY=...   # 法人契約/トライアルの正規 API のみ
-supabase secrets set ORS_API_KEY=...        # OpenRouteService
+supabase secrets set NAVITIME_RAPIDAPI_KEY=...   # NAVITIME（RapidAPI 経由）
+supabase secrets set ORS_API_KEY=...             # OpenRouteService（自転車・自動車、任意）
 ```
 
-キー未設定時、各 Edge Function は `503 provider_unavailable` を返し、フロントは自動的にデモ推定モードへ降級します（UI にバナー表示）。NAVITIME の Web ページのスクレイピングは行いません。結果は `commute_cache` / `isochrone_cache` に TTL 付きでキャッシュされます。
+任意の追加設定:
+
+| secret | 既定値 | 用途 |
+| --- | --- | --- |
+| `NAVITIME_RAPIDAPI_HOST` | `navitime-route-totalnavi.p.rapidapi.com` | 経路 API の RapidAPI ホスト |
+| `NAVITIME_MAX_CALLS_PER_REQUEST` | `20` | 1 検索が消費できる NAVITIME 呼び出し上限（クォータ保護） |
+
+キー未設定時も各 Edge Function は `503 provider_unavailable` を返し、フロントはデモ推定モードへ降級します（UI にバナー表示）。
+
+## 公開環境
+
+- フロントエンド: GitHub Pages（`main` への push で自動デプロイ）https://spaceman-git.github.io/AIAU-Souseki1/
+- バックエンド: Supabase（PostGIS データベース ＋ Edge Functions）
 
 ## CSV インポート
 
@@ -84,8 +122,9 @@ npm run build      # 本番ビルド
 npx tsx scripts/generateSeed.ts  # supabase/seed.sql 再生成
 ```
 
-## データ出典
+## データ出典・注意
 
 - 地図タイル: [国土地理院](https://maps.gsi.go.jp/development/ichiran.html)
-- ジオコーディング（任意）: Geocoding.jp（約 10 秒に 1 リクエストの制限あり、キャッシュ必須）
-- 物件データ: 架空のデモデータ（Demo Seed Data）
+- 経路・場所検索: NAVITIME（RapidAPI 経由の正規 API）
+- 住所ジオコーディング（フォールバック）: Geocoding.jp（約 10 秒に 1 リクエストの制限あり、キャッシュ必須）
+- 物件データ: 架空のデモデータ（Demo Seed Data）。実物件データを扱う場合は提供元のライセンス条件に従ってください。

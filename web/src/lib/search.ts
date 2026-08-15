@@ -1,5 +1,6 @@
 import type {
   CommuteConditions,
+  FallbackReason,
   IsochroneResult,
   Listing,
   ListingFilters,
@@ -20,6 +21,8 @@ export interface SearchOutput {
   results: ListingWithCommute[]
   isochrone: IsochroneResult | null
   fallbackUsed: boolean
+  /** Why the real routing provider was abandoned, when known. */
+  fallbackReason: FallbackReason
   debug: DebugStats
 }
 
@@ -163,8 +166,12 @@ export async function runCommuteSearch(
 ): Promise<SearchOutput> {
   const started = performance.now()
   let fallbackUsed = false
-  const onFallback = () => {
+  let fallbackReason: FallbackReason = null
+  const onFallback = (_failed: string, _next: string, error: unknown) => {
     fallbackUsed = true
+    if ((error as { code?: string } | null)?.code === 'quota_exceeded') {
+      fallbackReason = 'quota_exceeded'
+    }
   }
   const throwIfAborted = () => {
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
@@ -177,16 +184,15 @@ export async function runCommuteSearch(
 
   let isochrone: IsochroneResult | null = null
   try {
-    isochrone = await withFallback(
-      conditions.mode,
-      (p) =>
-        p.calculateIsochrone({
-          center: company,
-          mode: conditions.mode,
-          timeLimitMinutes: conditions.maxMinutes,
-          arrivalTime: conditions.arrivalTime,
-        }),
-      onFallback,
+    // The isochrone is only a prefilter, so falling back to the demo
+    // polygon here does not make the commute times estimated.
+    isochrone = await withFallback(conditions.mode, (p) =>
+      p.calculateIsochrone({
+        center: company,
+        mode: conditions.mode,
+        timeLimitMinutes: conditions.maxMinutes,
+        arrivalTime: conditions.arrivalTime,
+      }),
     )
   } catch {
     isochrone = null
@@ -235,6 +241,7 @@ export async function runCommuteSearch(
     results: final,
     isochrone,
     fallbackUsed,
+    fallbackReason,
     debug: {
       provider: routes[0]?.provider ?? 'demo',
       apiCalls: stats.misses,

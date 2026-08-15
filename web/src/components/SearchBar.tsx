@@ -8,6 +8,10 @@ import { geocodeAddress } from '../lib/geocodingJp'
 
 const MODES: TravelMode[] = ['transit', 'walk_transit', 'car', 'bicycle', 'walk']
 
+/** Suggestions hit the paid NAVITIME quota, so keep keystroke calls low. */
+const SUGGEST_MIN_LENGTH = 2
+const SUGGEST_DEBOUNCE_MS = 500
+
 export function SearchBar({ onSearch }: { onSearch: () => void }) {
   const {
     locale,
@@ -51,9 +55,9 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
     setQuery(v)
     setGeocodeError(false)
     clearTimeout(debounceRef.current)
-    if (v.trim().length < 1) {
+    if (v.trim().length < SUGGEST_MIN_LENGTH) {
       setCandidates([])
-      setOpen(false)
+      setOpen(v.trim().length > 0)
       return
     }
     setOpen(true)
@@ -70,7 +74,7 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
       } finally {
         setLoading(false)
       }
-    }, 350)
+    }, SUGGEST_DEBOUNCE_MS)
   }
 
   const pick = (c: PlaceCandidate) => {

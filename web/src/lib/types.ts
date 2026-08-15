@@ -1,4 +1,4 @@
-import type { Polygon, MultiPolygon, LineString } from 'geojson'
+import type { Polygon, MultiPolygon, Position } from 'geojson'
 
 export type TravelMode =
   | 'transit'
@@ -6,6 +6,9 @@ export type TravelMode =
   | 'car'
   | 'bicycle'
   | 'walk'
+
+/** Why a search fell back from the real routing provider to estimates. */
+export type FallbackReason = 'quota_exceeded' | null
 
 export type ProviderName =
   | 'navitime'
@@ -50,7 +53,13 @@ export interface RouteResult {
   provider: ProviderName
   isEstimated: boolean
   computedAt: string
-  geometry?: LineString
+  shape?: RouteShape
+}
+
+/** Route line split by travel kind so the map can style each part. */
+export interface RouteShape {
+  walk: Position[][]
+  transit: Position[][]
 }
 
 export interface RouteInput {

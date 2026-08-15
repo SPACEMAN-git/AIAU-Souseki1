@@ -34,6 +34,10 @@ jobs:
           # Publishable (anon) key: safe to expose in the browser bundle
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable__3diCj3mywm6L1_d0fG0jw_1mH1VYAa
           VITE_DEMO_MODE: 'false'
+      # An empty worker chunk means the maplibre worker got tree-shaken away,
+      # which silently breaks every GeoJSON layer at runtime.
+      - name: Check maplibre worker chunk
+        run: test -n "$(find web/dist/assets -name 'maplibreWorkerEntry-*.js' -size +100k)"
       - run: cp web/dist/index.html web/dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
