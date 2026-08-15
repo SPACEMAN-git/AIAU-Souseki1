@@ -1,7 +1,7 @@
 export type Locale = 'ja' | 'zh'
 
 const dict = {
-  appTitle: { ja: '通勤圏さがし', zh: '通勤圈找房' },
+  appTitle: { ja: 'SUUMAP', zh: 'SUUMAP' },
   searchPlaceholder: {
     ja: '会社名・住所・駅名を入力',
     zh: '输入公司名、地址或车站名',

@@ -33,7 +33,7 @@ function squaredDistance(a: Origin, b: { lat: number; lng: number }): number {
  * (farthest, hence least likely to be inside the commute limit) are
  * skipped rather than degrading the whole batch to estimates.
  * Returns 503 provider_unavailable only when the key is missing, the
- * mode is not transit, or no route could be produced at all.
+ * mode is neither transit nor walk, or no route could be produced at all.
  */
 Deno.serve(async (req) => {
   const opt = handleOptions(req)
@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'invalid body' }, 400)
     }
     const isTransit = body.mode === 'transit' || body.mode === 'walk_transit'
-    if (!isTransit || !navitimeKey()) {
+    const walkOnly = body.mode === 'walk'
+    if ((!isTransit && !walkOnly) || !navitimeKey()) {
       return jsonResponse({ error: 'provider_unavailable' }, 503)
     }
 
@@ -103,7 +104,12 @@ Deno.serve(async (req) => {
           if (!o) return
           let route: RouteResult | null = null
           try {
-            route = await navitimeTransitRoute(o, destination, body.arrivalTime)
+            route = await navitimeTransitRoute(
+              o,
+              destination,
+              body.arrivalTime,
+              walkOnly,
+            )
           } catch {
             route = null
           }

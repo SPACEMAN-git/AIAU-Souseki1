@@ -154,6 +154,12 @@ function legKind(move: string | undefined): RouteLeg['kind'] {
   return 'train'
 }
 
+/** True when every move of the route is on foot (NAVITIME door-to-door walk). */
+export function isWalkOnly(item: NavitimeItem): boolean {
+  const moves = (item.sections ?? []).filter((s) => s.type === 'move')
+  return moves.length > 0 && moves.every((s) => legKind(s.move) === 'walk')
+}
+
 export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
   const move = item.summary?.move
   const total = move?.time
@@ -194,6 +200,9 @@ export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
   const via = stations.length
     ? `${stations[0]} → ${stations[stations.length - 1]}`
     : 'ドアツードア'
+  const summary = isWalkOnly(item)
+    ? '徒歩ルート（NAVITIME）'
+    : `${via}（乗換${transferCount}回・NAVITIME）`
 
   return {
     durationMinutes: Math.round(total),
@@ -201,7 +210,7 @@ export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
     transferCount,
     estimatedCostYen: fare == null ? null : Math.round(fare),
     legs,
-    summary: `${via}（乗換${transferCount}回・NAVITIME）`,
+    summary,
     provider: 'navitime',
     isEstimated: false,
     computedAt: new Date().toISOString(),
@@ -209,11 +218,19 @@ export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
   }
 }
 
-/** Calls NAVITIME route_transit for one origin/destination pair. */
+/**
+ * Calls NAVITIME route_transit for one origin/destination pair.
+ *
+ * route_transit is the only routing endpoint available on this RapidAPI
+ * plan, but its candidates include a door-to-door walking route with a
+ * street-following shape, so `walkOnly` picks that candidate instead of
+ * the fastest transit one (null when no walking candidate exists).
+ */
 export async function navitimeTransitRoute(
   origin: LatLng,
   destination: LatLng,
   arrivalTime?: string,
+  walkOnly = false,
 ): Promise<RouteResult | null> {
   const key = navitimeKey()
   if (!key) return null
@@ -229,6 +246,7 @@ export async function navitimeTransitRoute(
   })
   if (!res.ok) return null
   const data = (await res.json()) as { items?: NavitimeItem[] }
-  const item = data.items?.[0]
+  const items = data.items ?? []
+  const item = walkOnly ? items.find(isWalkOnly) : items[0]
   return item ? mapNavitimeRoute(item) : null
 }
