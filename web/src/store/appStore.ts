@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   CommuteConditions,
+  FallbackReason,
   IsochroneResult,
   ListingFilters,
   ListingWithCommute,
@@ -34,6 +35,7 @@ interface AppState {
   searching: boolean
   searchError: string | null
   fallbackNotice: boolean
+  fallbackReason: FallbackReason
   selectedListingId: string | null
   hoveredListingId: string | null
   detailListingId: string | null
@@ -52,7 +54,7 @@ interface AppState {
   setIsochrone(i: IsochroneResult | null): void
   setSearching(v: boolean): void
   setSearchError(e: string | null): void
-  setFallbackNotice(v: boolean): void
+  setFallbackNotice(v: boolean, reason?: FallbackReason): void
   selectListing(id: string | null): void
   hoverListing(id: string | null): void
   openDetail(id: string | null): void
@@ -92,6 +94,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   searching: false,
   searchError: null,
   fallbackNotice: false,
+  fallbackReason: null,
   selectedListingId: null,
   hoveredListingId: null,
   detailListingId: null,
@@ -111,7 +114,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsochrone: (isochrone) => set({ isochrone }),
   setSearching: (searching) => set({ searching }),
   setSearchError: (searchError) => set({ searchError }),
-  setFallbackNotice: (fallbackNotice) => set({ fallbackNotice }),
+  setFallbackNotice: (fallbackNotice, fallbackReason = null) =>
+    set({ fallbackNotice, fallbackReason }),
   selectListing: (selectedListingId) => set({ selectedListingId }),
   hoverListing: (hoveredListingId) => set({ hoveredListingId }),
   openDetail: (detailListingId) => set({ detailListingId }),

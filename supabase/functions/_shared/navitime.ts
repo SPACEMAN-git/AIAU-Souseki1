@@ -56,7 +56,20 @@ export function navitimeKey(): string | undefined {
 /** Max NAVITIME calls a single batch request may spend (quota guard). */
 export function navitimeMaxCalls(): number {
   const raw = Number(Deno.env.get('NAVITIME_MAX_CALLS_PER_REQUEST'))
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 100
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 25
+}
+
+/**
+ * RapidAPI answers 429 for the whole month once the plan quota is spent,
+ * so further calls only waste latency. Remembered per isolate for a short
+ * window and reported to callers so the UI can explain the degradation
+ * instead of silently showing estimates.
+ */
+const QUOTA_MEMO_MS = 60_000
+let quotaExceededAt = 0
+
+export function navitimeQuotaExceeded(): boolean {
+  return Date.now() - quotaExceededAt < QUOTA_MEMO_MS
 }
 
 /**
@@ -244,9 +257,28 @@ export async function navitimeTransitRoute(
   const res = await fetch(`https://${host}/route_transit?${params}`, {
     headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host },
   })
+  if (res.status === 429) {
+    quotaExceededAt = Date.now()
+    return null
+  }
   if (!res.ok) return null
   const data = (await res.json()) as { items?: NavitimeItem[] }
   const items = data.items ?? []
-  const item = walkOnly ? items.find(isWalkOnly) : items[0]
+  const item = fastest(walkOnly ? items.filter(isWalkOnly) : items)
   return item ? mapNavitimeRoute(item) : null
+}
+
+/** NAVITIME candidates are not ordered by duration, so pick explicitly. */
+function fastest(items: NavitimeItem[]): NavitimeItem | undefined {
+  let best: NavitimeItem | undefined
+  let bestTime = Infinity
+  for (const item of items) {
+    const time = item.summary?.move?.time
+    if (typeof time !== 'number') continue
+    if (time < bestTime) {
+      bestTime = time
+      best = item
+    }
+  }
+  return best ?? items[0]
 }

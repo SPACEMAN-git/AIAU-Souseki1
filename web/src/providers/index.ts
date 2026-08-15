@@ -33,7 +33,7 @@ export function providerChain(mode: TravelMode): CommuteProvider[] {
 export async function withFallback<T>(
   mode: TravelMode,
   fn: (p: CommuteProvider) => Promise<T>,
-  onFallback?: (failed: string, next: string) => void,
+  onFallback?: (failed: string, next: string, error: unknown) => void,
 ): Promise<T> {
   const chain = providerChain(mode)
   let lastError: unknown = null
@@ -43,7 +43,7 @@ export async function withFallback<T>(
     } catch (err) {
       lastError = err
       const next = chain[i + 1]
-      if (next && onFallback) onFallback(chain[i].name, next.name)
+      if (next && onFallback) onFallback(chain[i].name, next.name, err)
     }
   }
   throw lastError
