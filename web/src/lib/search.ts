@@ -141,7 +141,11 @@ async function fetchCandidates(
       p_limit: 500,
     })
     if (!error && Array.isArray(data)) {
-      return (data as DbListingRow[]).map(rowToListing)
+      // The RPC is a prefilter only: it has no max-area or amenity
+      // parameters, so every row still goes through matchesFilters.
+      return (data as DbListingRow[])
+        .map(rowToListing)
+        .filter((l) => matchesFilters(l, filters))
     }
   }
   return DEMO_LISTINGS.filter(

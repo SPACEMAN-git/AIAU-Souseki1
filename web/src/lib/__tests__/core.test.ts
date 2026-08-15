@@ -106,6 +106,12 @@ describe('filters', () => {
     expect(matchesFilters(l, { maxRent: 80000 })).toBe(false)
     expect(matchesFilters(l, { minRent: 50000, maxRent: 100000 })).toBe(true)
   })
+  it('area range filter', () => {
+    const l = demoListing({ floorArea: 42 })
+    expect(matchesFilters(l, { maxArea: 30 })).toBe(false)
+    expect(matchesFilters(l, { minArea: 50 })).toBe(false)
+    expect(matchesFilters(l, { minArea: 30, maxArea: 50 })).toBe(true)
+  })
   it('filterByCommute drops over-limit and missing routes', () => {
     const items = [
       demoListing({ id: 'a', commute: route(25) }),
