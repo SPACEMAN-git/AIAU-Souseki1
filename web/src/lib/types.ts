@@ -7,6 +7,9 @@ export type TravelMode =
   | 'bicycle'
   | 'walk'
 
+/** Why a search fell back from the real routing provider to estimates. */
+export type FallbackReason = 'quota_exceeded' | null
+
 export type ProviderName =
   | 'navitime'
   | 'openrouteservice'

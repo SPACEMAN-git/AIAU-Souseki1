@@ -2,11 +2,15 @@ import { useRef, useState } from 'react'
 import type { PlaceCandidate, TravelMode } from '../lib/types'
 import { useAppStore } from '../store/appStore'
 import { t } from '../lib/i18n'
-import { MAX_COMMUTE_OPTIONS } from '../lib/config'
+import { MAX_COMMUTE_LIMIT, MAX_COMMUTE_OPTIONS } from '../lib/config'
 import { withFallback } from '../providers'
 import { geocodeAddress } from '../lib/geocodingJp'
 
 const MODES: TravelMode[] = ['transit', 'walk_transit', 'car', 'bicycle', 'walk']
+
+/** Suggestions hit the paid NAVITIME quota, so keep keystroke calls low. */
+const SUGGEST_MIN_LENGTH = 2
+const SUGGEST_DEBOUNCE_MS = 500
 
 export function SearchBar({ onSearch }: { onSearch: () => void }) {
   const {
@@ -20,6 +24,7 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
     setLocale,
   } = useAppStore()
   const [query, setQuery] = useState('')
+  const [minutesText, setMinutesText] = useState(String(conditions.maxMinutes))
   const [candidates, setCandidates] = useState<PlaceCandidate[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -51,9 +56,9 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
     setQuery(v)
     setGeocodeError(false)
     clearTimeout(debounceRef.current)
-    if (v.trim().length < 1) {
+    if (v.trim().length < SUGGEST_MIN_LENGTH) {
       setCandidates([])
-      setOpen(false)
+      setOpen(v.trim().length > 0)
       return
     }
     setOpen(true)
@@ -70,7 +75,22 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
       } finally {
         setLoading(false)
       }
-    }, 350)
+    }, SUGGEST_DEBOUNCE_MS)
+  }
+
+  const setMinutes = (minutes: number) => {
+    setMinutesText(String(minutes))
+    if (minutes !== conditions.maxMinutes) setConditions({ maxMinutes: minutes })
+  }
+
+  /** Applies a hand-typed limit on blur/Enter, so typing does not re-search. */
+  const commitMinutes = () => {
+    const n = Math.round(Number(minutesText))
+    if (!Number.isFinite(n) || n < 1) {
+      setMinutesText(String(conditions.maxMinutes))
+      return
+    }
+    setMinutes(Math.min(n, MAX_COMMUTE_LIMIT))
   }
 
   const pick = (c: PlaceCandidate) => {
@@ -118,6 +138,13 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
                 {t(locale, 'geocodeNoResult')}
               </p>
             )}
+            {!loading &&
+              candidates.length === 0 &&
+              query.trim().length >= SUGGEST_MIN_LENGTH && (
+                <p className="px-3 pb-2 text-xs text-gray-500">
+                  {t(locale, 'suggestEmpty')}
+                </p>
+              )}
             {candidates.length > 0 && (
               <ul className="max-h-72 w-full overflow-auto border-t border-gray-100">
             {candidates.map((c) => (
@@ -160,25 +187,43 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
           </option>
         ))}
       </select>
-      <select
-        className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
-        value={conditions.maxMinutes}
-        onChange={(e) => setConditions({ maxMinutes: Number(e.target.value) })}
-        aria-label={t(locale, 'maxCommute')}
-      >
-        {MAX_COMMUTE_OPTIONS.map((m) => (
-          <option key={m} value={m}>
-            ≤ {m}分
+      <div className="flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm">
+        <span className="text-gray-500">≤</span>
+        <input
+          type="number"
+          min={1}
+          max={MAX_COMMUTE_LIMIT}
+          step={1}
+          className="w-12 text-right focus:outline-none"
+          value={minutesText}
+          onChange={(e) => setMinutesText(e.target.value)}
+          onBlur={commitMinutes}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitMinutes()
+          }}
+          aria-label={t(locale, 'maxCommute')}
+        />
+        <span className="text-gray-500">分</span>
+        <select
+          className="-mr-1 border-l border-gray-200 pl-1 text-xs text-gray-500 focus:outline-none"
+          value={
+            MAX_COMMUTE_OPTIONS.includes(conditions.maxMinutes)
+              ? conditions.maxMinutes
+              : ''
+          }
+          onChange={(e) => setMinutes(Number(e.target.value))}
+          aria-label={t(locale, 'maxCommute')}
+        >
+          <option value="" disabled>
+            …
           </option>
-        ))}
-      </select>
-      <input
-        type="time"
-        className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-        value={conditions.arrivalTime}
-        onChange={(e) => setConditions({ arrivalTime: e.target.value })}
-        aria-label={t(locale, 'arrivalTime')}
-      />
+          {MAX_COMMUTE_OPTIONS.map((m) => (
+            <option key={m} value={m}>
+              {m}分
+            </option>
+          ))}
+        </select>
+      </div>
       <button
         type="button"
         disabled={!company || searching}

@@ -42,6 +42,9 @@ export const CACHE_TTL_DAYS = {
 
 export const MAX_COMMUTE_OPTIONS = [15, 20, 30, 40, 45, 60, 75, 90]
 
+/** Upper bound for a hand-typed commute limit (minutes). */
+export const MAX_COMMUTE_LIMIT = 180
+
 export const DEFAULT_ARRIVAL_TIME = '09:00'
 
 export const GSI_TILE_URL =

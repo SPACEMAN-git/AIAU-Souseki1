@@ -1,10 +1,10 @@
 export type Locale = 'ja' | 'zh'
 
 const dict = {
-  appTitle: { ja: '通勤圏さがし', zh: '通勤圈找房' },
+  appTitle: { ja: 'SUUMAP', zh: 'SUUMAP' },
   searchPlaceholder: {
-    ja: '会社名・住所・駅名を入力',
-    zh: '输入公司名、地址或车站名',
+    ja: '住所・駅名・施設名（一部でも OK）',
+    zh: '输入地址 / 车站 / 建筑名（可只输入一部分）',
   },
   searchButton: { ja: '物件を検索', zh: '搜索房源' },
   commuteMode: { ja: '通勤手段', zh: '通勤方式' },
@@ -72,6 +72,10 @@ const dict = {
     ja: '正確な経路を取得できないため、デモ推定モードに切り替えました。',
     zh: '当前无法获取精确公共交通路线，已切换为演示估算模式。',
   },
+  fallbackNoticeQuota: {
+    ja: 'NAVITIME の月間利用上限に達したため、経路と所要時間はデモ推定（直線に近い表示）です。',
+    zh: 'NAVITIME 月度调用额度已用完，当前路线和时间为演示估算（因此接近直线）。',
+  },
   searchArea: { ja: '事前絞り込み範囲', zh: '预筛选范围' },
   isochroneArea: { ja: '通勤到達圏', zh: '通勤可达圈' },
   listingPoint: { ja: '物件（クリックで詳細）', zh: '房源（点击查看详情）' },
@@ -88,13 +92,17 @@ const dict = {
   dataSource: { ja: 'データ提供', zh: '数据来源' },
   loading: { ja: '検索中…', zh: '搜索中…' },
   geocodeAddress: {
-    ja: '住所から座標を検索（Geocoding.jp）',
-    zh: '将地址转换为坐标（Geocoding.jp）',
+    ja: '住所・地名から座標を検索',
+    zh: '将地址/地名转换为坐标',
   },
   geocodeLoading: { ja: '住所を変換中…', zh: '正在转换地址…' },
   geocodeNoResult: {
     ja: '住所を変換できませんでした。表記を変えてお試しください。',
     zh: '无法转换该地址，请更换写法后重试。',
+  },
+  suggestEmpty: {
+    ja: '候補がありません。短めのキーワード（例:「西新宿2」「上野」）でお試しください。',
+    zh: '没有候选。请试更短的关键词（如“西新宿2”“上野”）。',
   },
 } as const
 

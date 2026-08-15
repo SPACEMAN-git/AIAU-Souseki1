@@ -4,11 +4,16 @@ import { commuteCacheKey } from '../_shared/cacheKey.ts'
 import {
   navitimeKey,
   navitimeMaxCalls,
+  navitimeQuotaExceeded,
   navitimeTransitRoute,
   type RouteResult,
 } from '../_shared/navitime.ts'
 
-const CACHE_TTL_HOURS = 24 * 3
+/**
+ * Routes barely change, and the RapidAPI plan only allows a few hundred
+ * calls per month, so cached routes are kept for a month.
+ */
+const CACHE_TTL_HOURS = 24 * 30
 const CONCURRENCY = 6
 
 interface Origin {
@@ -33,7 +38,7 @@ function squaredDistance(a: Origin, b: { lat: number; lng: number }): number {
  * (farthest, hence least likely to be inside the commute limit) are
  * skipped rather than degrading the whole batch to estimates.
  * Returns 503 provider_unavailable only when the key is missing, the
- * mode is not transit, or no route could be produced at all.
+ * mode is neither transit nor walk, or no route could be produced at all.
  */
 Deno.serve(async (req) => {
   const opt = handleOptions(req)
@@ -49,7 +54,8 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'invalid body' }, 400)
     }
     const isTransit = body.mode === 'transit' || body.mode === 'walk_transit'
-    if (!isTransit || !navitimeKey()) {
+    const walkOnly = body.mode === 'walk'
+    if ((!isTransit && !walkOnly) || !navitimeKey()) {
       return jsonResponse({ error: 'provider_unavailable' }, 503)
     }
 
@@ -99,11 +105,17 @@ Deno.serve(async (req) => {
       { length: Math.min(CONCURRENCY, queue.length) },
       async () => {
         for (;;) {
+          if (navitimeQuotaExceeded()) return
           const o = queue.shift()
           if (!o) return
           let route: RouteResult | null = null
           try {
-            route = await navitimeTransitRoute(o, destination, body.arrivalTime)
+            route = await navitimeTransitRoute(
+              o,
+              destination,
+              body.arrivalTime,
+              walkOnly,
+            )
           } catch {
             route = null
           }
@@ -132,8 +144,15 @@ Deno.serve(async (req) => {
     )
     await Promise.all(workers)
 
+    const quotaExceeded = navitimeQuotaExceeded()
     if (routes.length === 0) {
-      return jsonResponse({ error: 'provider_unavailable' }, 503)
+      return jsonResponse(
+        {
+          error: 'provider_unavailable',
+          reason: quotaExceeded ? 'quota_exceeded' : 'no_route',
+        },
+        503,
+      )
     }
     return jsonResponse({
       routes,
@@ -143,6 +162,7 @@ Deno.serve(async (req) => {
         apiCalls: targets.length,
         failed,
         skipped,
+        quotaExceeded,
       },
     })
   } catch (err) {
