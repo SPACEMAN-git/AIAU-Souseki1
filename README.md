@@ -58,9 +58,18 @@ VITE_DEMO_MODE=false
 第三者 API キーはブラウザに一切渡しません。Edge Function の secret として設定します:
 
 ```bash
-supabase secrets set NAVITIME_API_KEY=...   # 法人契約/トライアルの正規 API のみ
-supabase secrets set ORS_API_KEY=...        # OpenRouteService
+supabase secrets set NAVITIME_RAPIDAPI_KEY=...   # NAVITIME（RapidAPI 経由）
+supabase secrets set ORS_API_KEY=...             # OpenRouteService
 ```
+
+任意の追加設定:
+
+| secret | 既定値 | 用途 |
+| --- | --- | --- |
+| `NAVITIME_RAPIDAPI_HOST` | `navitime-route-totalnavi.p.rapidapi.com` | RapidAPI ホスト |
+| `NAVITIME_MAX_CALLS_PER_REQUEST` | `60` | 1 検索が消費できる NAVITIME 呼び出し上限（クォータ保護） |
+
+NAVITIME にはバッチ経路 API がないため、`calculate-commute-batch` は未キャッシュの物件のみ並列度 4 で個別に `route_transit` を呼び、結果を `commute_cache`（TTL 3 日）に保存します。未キャッシュ件数が上限を超える検索は `503` を返し、実経路と推定値が混在しないよう全件デモ推定へ降級します。
 
 キー未設定時、各 Edge Function は `503 provider_unavailable` を返し、フロントは自動的にデモ推定モードへ降級します（UI にバナー表示）。NAVITIME の Web ページのスクレイピングは行いません。結果は `commute_cache` / `isochrone_cache` に TTL 付きでキャッシュされます。
 
