@@ -12,8 +12,10 @@ import type { ListingWithCommute } from '../lib/types'
 const LISTING_COLOR = '#dc2626'
 const FAVORITE_COLOR = '#eab308'
 
+// Highlighting must not change the pill's size: a growing pill can slip out
+// from under the cursor, which flips hover on and off in a loop.
 const PILL_CLASS =
-  'cursor-pointer rounded-full border-2 border-white px-1.5 py-0.5 text-[11px] leading-none font-bold text-white shadow transition-transform'
+  'cursor-pointer rounded-full border-2 border-white px-1.5 py-0.5 text-[11px] leading-none font-bold text-white shadow'
 
 /** Rent shown on the map pill in 万円 units, e.g. 85000 -> "8.5万". */
 export function rentPillLabel(yen: number): string {
@@ -190,7 +192,9 @@ export function MapView() {
         openDetail(l.id)
       })
       el.addEventListener('mouseenter', () => hoverListing(l.id))
-      el.addEventListener('mouseleave', () => hoverListing(null))
+      el.addEventListener('mouseleave', () => {
+        if (useAppStore.getState().hoveredListingId === l.id) hoverListing(null)
+      })
       markersRef.current.set(
         l.id,
         new maplibregl.Marker({ element: el })
@@ -283,15 +287,17 @@ export function MapView() {
     }
   }, [selectedListingId, results])
 
-  // Highlight hovered / selected listing pills.
+  // Highlight hovered / selected listing pills. Hovering must not restack or
+  // resize a pill: moving it out from under the cursor would flip the hover
+  // state on and off in a loop when pills overlap.
   useEffect(() => {
     for (const [id, marker] of markersRef.current) {
-      const active = id === hoveredListingId || id === selectedListingId
       const el = marker.getElement()
-      el.style.zIndex = active ? '2' : '1'
-      el.style.scale = active ? '1.25' : '1'
-      el.style.outline = id === selectedListingId ? '2px solid #1d4ed8' : ''
-      el.style.outlineOffset = '1px'
+      el.style.zIndex = id === selectedListingId ? '2' : '1'
+      el.style.boxShadow =
+        id === hoveredListingId || id === selectedListingId
+          ? '0 0 0 3px #1d4ed8'
+          : ''
     }
   }, [hoveredListingId, selectedListingId, results, favorites])
 
