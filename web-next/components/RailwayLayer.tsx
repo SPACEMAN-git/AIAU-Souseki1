@@ -32,7 +32,7 @@ export default function RailwayLayer({ map, line }: RailwayLayerProps) {
     let disposed = false;
 
     const setup = () => {
-      if (disposed) return;
+      if (disposed || !map.getStyle()) return;
       if (!map.getSource(SOURCE_ID)) {
         map.addSource(SOURCE_ID, { type: "geojson", data: emptyFeature() });
       }
@@ -64,11 +64,13 @@ export default function RailwayLayer({ map, line }: RailwayLayerProps) {
       }
     };
 
-    if (map.isStyleLoaded()) setup();
-    else map.once("load", setup);
+    // style 読み込み前に addLayer すると失敗するため、必要なら styledata を待つ
+    if (map.style) setup();
+    else map.once("styledata", setup);
 
     return () => {
       disposed = true;
+      map.off("styledata", setup);
       if (!map.getStyle()) return;
       for (const id of [LINE_LAYER_ID, CASING_LAYER_ID]) {
         if (map.getLayer(id)) map.removeLayer(id);
@@ -97,8 +99,12 @@ export default function RailwayLayer({ map, line }: RailwayLayerProps) {
         map.setPaintProperty(LINE_LAYER_ID, "line-color", line.color);
       }
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    apply();
+    // source が未作成のタイミングでも次の styledata で必ず反映させる
+    map.once("styledata", apply);
+    return () => {
+      map.off("styledata", apply);
+    };
   }, [map, line]);
 
   return null;
