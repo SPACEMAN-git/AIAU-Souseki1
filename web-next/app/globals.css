@@ -1,27 +1,45 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* surface */
+  --bg-app: #f6f7f9;
+  --bg-surface: #fff;
+  --bg-subtle: #eef1f5;
+  --border: #e3e7ec;
+  --border-strong: #c9d1da;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+  /* text */
+  --text-1: #111827;
+  --text-2: #4b5563;
+  --text-3: #8b95a1;
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
+  /* brand & semantic */
+  --brand: #1b6ef3;
+  --brand-weak: #e8f0fe;
+  --workplace: #e0295c;
+  --primary-station: #0f9d58;
+  --primary-station-weak: #e6f4ec;
+  --candidate: #2b7fd4;
+  --warn: #b45309;
+  --danger: #c0392b;
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+
+  /* layout */
+  --topbar-h: 56px;
+  --searchbar-h: 72px;
+  --rail-w: 380px;
+  --control-h: 40px;
+  --radius-card: 12px;
+  --radius-input: 8px;
+
+  --shadow-1: 0 1px 2px rgb(17 24 39 / 8%);
+  --shadow-2: 0 4px 16px rgb(17 24 39 / 12%);
 }
 
 * {
@@ -30,13 +48,35 @@ body {
   margin: 0;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text-1);
+  font-family: var(--font-geist-sans), "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP", sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
 a {
   color: inherit;
   text-decoration: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
 }

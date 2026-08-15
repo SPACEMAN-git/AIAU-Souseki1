@@ -1,22 +1,28 @@
+.canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-subtle);
+}
+
 .map {
   width: 100%;
   height: 100%;
-  min-height: 420px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  overflow: hidden;
 }
+
+/* ---- marker 階層: 勤務先 > 主要起点駅 > 候補駅 > 路線 ---- */
 
 .workplaceMarker {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border: 2px solid #fff;
   border-radius: 50%;
-  background: #d61f3a;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 40%);
+  background: var(--workplace);
+  box-shadow: var(--shadow-2);
   color: #fff;
   font-size: 16px;
   line-height: 1;
@@ -24,67 +30,217 @@
 }
 
 .stationMarker {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #fff;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid #fff;
   border-radius: 50%;
-  background: #1f6fd6;
+  background: var(--candidate);
+  box-shadow: var(--shadow-1);
   cursor: pointer;
 }
 
+/* 通勤時間の強弱は opacity だけで表す（色とサイズは固定） */
 .level1 {
-  width: 16px;
-  height: 16px;
-  background: #0b4ea2;
   opacity: 1;
 }
 
 .level2 {
-  background: #1f6fd6;
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
 .level3 {
-  width: 12px;
-  height: 12px;
-  background: #6ea8e8;
-  opacity: 0.7;
+  opacity: 0.5;
 }
 
-/* 勤務先から徒歩圏内の主要起点駅。勤務先より弱く、候補駅より目立たせる */
+/* 勤務先から徒歩圏内の主要起点駅。駅名ラベルを常時表示する */
 .accessMarker {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: #0f9d58;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
-  color: #fff;
-  font-size: 12px;
-  line-height: 1;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 5px;
+  background: var(--primary-station);
+  box-shadow: var(--shadow-2);
   opacity: 1;
+}
+
+.accessLabel {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 92%);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  transform: translateX(-50%);
 }
 
 /* 路線選択中: 沿線の候補駅を強調し、それ以外は視覚優先度を下げる */
 .onLineMarker {
-  border-color: #fff;
-  box-shadow: 0 0 0 2px rgb(0 0 0 / 35%);
+  box-shadow: 0 0 0 2px rgb(17 24 39 / 25%);
   opacity: 1;
 }
 
 .offLineMarker {
-  opacity: 0.3;
+  opacity: 0.25;
+}
+
+/* 勤務先と主要起点駅は路線選択の影響を受けない */
+.workplaceMarker.offLineMarker,
+.accessMarker.offLineMarker {
+  opacity: 1;
 }
 
 .popup {
-  color: #111;
-  font-size: 0.85rem;
+  color: var(--text-1);
+  font-size: 13px;
   line-height: 1.5;
 }
 
-@media (prefers-color-scheme: dark) {
-  .map {
-    border-color: #333;
-  }
+/* ---- 地図上のコントロール類 ---- */
+
+.controls {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.control {
+  width: var(--control-h);
+  height: var(--control-h);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 95%);
+  box-shadow: var(--shadow-1);
+  color: var(--text-1);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.control:hover {
+  border-color: var(--border-strong);
+  background: #fff;
+}
+
+.control:disabled {
+  cursor: not-allowed;
+  color: var(--text-3);
+}
+
+.legend {
+  position: absolute;
+  bottom: var(--space-4);
+  left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: rgb(255 255 255 / 94%);
+  box-shadow: var(--shadow-1);
+  font-size: 12px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-2);
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: var(--shadow-1);
+}
+
+.legendWorkplace {
+  background: var(--workplace);
+}
+
+.legendPrimary {
+  border-radius: 3px;
+  background: var(--primary-station);
+}
+
+.legendCandidate {
+  background: var(--candidate);
+}
+
+.legendLine {
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--text-3);
+}
+
+.lineBar {
+  position: absolute;
+  bottom: var(--space-4);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: min(520px, 70%);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: var(--shadow-2);
+  transform: translateX(-50%);
+}
+
+.lineBarSwatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.lineBarName {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineBarOperator {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lineBarClose {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lineBarClose:hover {
+  background: var(--border);
+}
+
+.loadingVeil {
+  position: absolute;
+  inset: 0;
+  background: rgb(246 247 249 / 45%);
+  pointer-events: none;
 }
