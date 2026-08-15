@@ -1,23 +1,26 @@
 // navitime-proxy Edge Function
-// GET ?action=geocode&q=<住所>
+// GET ?action=geocode&q=<住所 or 駅名（住所が 0 件なら駅名検索へフォールバック）>
+// GET ?action=reverse_geocode&lat=<lat>&lng=<lng>
 // GET ?action=reachable&lat=<lat>&lng=<lng>&term=<分, 1-180>[&transit_limit=<乗換回数上限, 0-30>]
 // GET ?action=transport&q=<駅名>[&limit=<1-30>]
 // GET ?action=route&from_lat=&from_lng=&to_lat=&to_lng=[&start_time=<ISO8601>]
 // 共通: &mock=1 で mock レスポンス（RAPIDAPI_KEY 未設定時も自動で mock にフォールバック）
 //
 // レスポンス（normalized）:
-//   { ok: true,  action, mock: boolean, data: Normalized(Geocode|Reachable|Transport|Route) }
+//   { ok: true,  action, mock: boolean, data: Normalized(Geocode|ReverseGeocode|Reachable|Transport|Route) }
 //   { ok: false, error: { code, message } }
 
 import {
   fetchGeocode,
   fetchReachable,
+  fetchReverseGeocode,
   fetchRoute,
   fetchTransportNode,
 } from "./navitime.ts";
 import {
   mockGeocode,
   mockReachable,
+  mockReverseGeocode,
   mockRoute,
   mockTransport,
 } from "./mock.ts";
@@ -69,6 +72,18 @@ export async function handleRequest(req: Request): Promise<Response> {
         const q = url.searchParams.get("q")?.trim();
         if (!q) return errorResponse("bad_request", "q is required", 400);
         const data = useMock ? mockGeocode(q) : await fetchGeocode(q, apiKey!);
+        return json({ ok: true, action, mock: useMock, data });
+      }
+      case "reverse_geocode": {
+        const lat = Number(url.searchParams.get("lat"));
+        const lng = Number(url.searchParams.get("lng"));
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return errorResponse("bad_request", "lat/lng must be numbers", 400);
+        }
+        const coord = { lat, lng };
+        const data = useMock
+          ? mockReverseGeocode(coord)
+          : await fetchReverseGeocode(coord, apiKey!);
         return json({ ok: true, action, mock: useMock, data });
       }
       case "reachable": {
@@ -160,7 +175,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       default:
         return errorResponse(
           "bad_request",
-          "action must be one of: geocode, reachable, transport, route",
+          "action must be one of: geocode, reverse_geocode, reachable, transport, route",
           400,
         );
     }

@@ -2,6 +2,7 @@
 import type {
   NormalizedGeocode,
   NormalizedReachable,
+  NormalizedReverseGeocode,
   NormalizedRoute,
   NormalizedTransport,
   TransportNode,
@@ -10,8 +11,24 @@ import type {
 export function mockGeocode(query: string): NormalizedGeocode {
   return {
     query,
+    source: "address",
     results: [
       { name: `${query}（mock: 東京駅付近）`, lat: 35.681236, lng: 139.767125 },
+    ],
+  };
+}
+
+export function mockReverseGeocode(
+  coord: { lat: number; lng: number },
+): NormalizedReverseGeocode {
+  return {
+    coord,
+    results: [
+      {
+        name: "東京都千代田区丸の内1丁目9（mock）",
+        lat: coord.lat,
+        lng: coord.lng,
+      },
     ],
   };
 }

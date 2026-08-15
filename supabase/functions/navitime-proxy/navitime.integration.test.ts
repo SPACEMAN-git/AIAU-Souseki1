@@ -2,7 +2,7 @@
 //
 // 単体テスト（navitime.test.ts）は完全に mock で、このファイルだけが実 API を叩く。
 // RAPIDAPI_KEY が無い場合はスキップされる（CI で落ちない）。
-// RapidAPI の無料プランは各 API 500 req/月 のため、1 回の実行で 4 リクエストに抑える。
+// RapidAPI の無料プランは各 API 500 req/月 のため、1 回の実行で 7 リクエストに抑える。
 //
 //   deno test --allow-env --allow-net supabase/functions/navitime-proxy/navitime.integration.test.ts
 //
@@ -58,7 +58,7 @@ function tomorrow9am(): string {
 }
 
 Deno.test({
-  name: "integration: NAVITIME 4 サービス（実 API）",
+  name: "integration: NAVITIME 各サービス（実 API）",
   ignore: !hasKey,
   sanitizeResources: false,
   fn: async (t) => {
@@ -75,6 +75,28 @@ Deno.test({
       console.log(
         `  geocode -> ${data.results.length} 件 / 先頭: ${first.name}`,
       );
+    });
+
+    await t.step(`geocode 駅名フォールバック @ ${TRANSPORT_HOST}`, async () => {
+      // 住所検索は「東京駅」で 0 件なので駅名検索にフォールバックする（上流 2 リクエスト）。
+      const data = await callProxy(
+        `action=geocode&q=${encodeURIComponent("東京駅")}`,
+      );
+      assertEquals(data.source, "transport_node");
+      assert(data.results.length > 0, "fallback results is empty");
+      console.log(`  geocode(fallback) -> 先頭: ${data.results[0].name}`);
+    });
+
+    await t.step(`reverse_geocode @ ${GEOCODING_HOST}`, async () => {
+      const data = await callProxy(
+        "action=reverse_geocode&lat=35.624822&lng=139.742121",
+      );
+      assert(data.results.length > 0, "reverse_geocode results is empty");
+      assert(
+        data.results[0].name.startsWith("東京都"),
+        `unexpected address: ${data.results[0].name}`,
+      );
+      console.log(`  reverse_geocode -> ${data.results[0].name}`);
     });
 
     await t.step(`reachable 30 分 @ ${REACHABLE_HOST}`, async () => {
@@ -148,7 +170,7 @@ Deno.test({
         calls.map((c) => `    - ${c.host} => ${c.status}`).join("\n")
       }`,
     );
-    assertEquals(calls.length, 4, "unexpected upstream request count");
+    assertEquals(calls.length, 7, "unexpected upstream request count");
     assert(
       calls.every((c) => c.status === 200),
       `non-200 upstream response: ${JSON.stringify(calls)}`,

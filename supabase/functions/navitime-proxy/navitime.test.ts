@@ -1,7 +1,9 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
+  geocodeFromTransport,
   normalizeGeocode,
   normalizeReachable,
+  normalizeReverseGeocode,
   normalizeRoute,
   normalizeTransport,
 } from "./navitime.ts";
@@ -22,7 +24,48 @@ Deno.test("normalizeGeocode: NAVITIME items -> results", () => {
   };
   const n = normalizeGeocode("渋谷", raw);
   assertEquals(n.query, "渋谷");
+  assertEquals(n.source, "address");
   assertEquals(n.results, [{ name: "東京都渋谷区", lat: 35.66, lng: 139.7 }]);
+});
+
+Deno.test("normalizeReverseGeocode: coord -> 住所結果", () => {
+  const coord = { lat: 35.624822, lng: 139.742121 };
+  const n = normalizeReverseGeocode(coord, {
+    items: [
+      {
+        name: "東京都品川区北品川1丁目6-16",
+        coord: { lat: 35.624706, lon: 139.740515 },
+      },
+    ],
+  });
+  assertEquals(n.coord, coord);
+  assertEquals(n.results[0].name, "東京都品川区北品川1丁目6-16");
+  assertEquals(n.results[0].lng, 139.740515);
+});
+
+Deno.test("geocodeFromTransport: 駅名検索結果を geocode 形式に変換", () => {
+  const n = geocodeFromTransport(mockTransport("東京", 1));
+  assertEquals(n.source, "transport_node");
+  assertEquals(n.results[0].name, "東京（東京都千代田区丸の内）");
+  assertEquals(n.results[0].lat, 35.681041);
+});
+
+Deno.test("handler: reverse_geocode (mock=1) / lat不正は 400", async () => {
+  const ok = await handleRequest(
+    new Request(
+      "http://local/x?action=reverse_geocode&lat=35.62&lng=139.74&mock=1",
+    ),
+  );
+  assertEquals(ok.status, 200);
+  const body = await ok.json();
+  assertEquals(body.ok, true);
+  assertEquals(body.data.coord, { lat: 35.62, lng: 139.74 });
+  assertEquals(body.data.results.length, 1);
+
+  const bad = await handleRequest(
+    new Request("http://local/x?action=reverse_geocode&lat=abc&mock=1"),
+  );
+  assertEquals(bad.status, 400);
 });
 
 Deno.test("normalizeReachable: time 昇順ソート & time 欠損は term で補完", () => {

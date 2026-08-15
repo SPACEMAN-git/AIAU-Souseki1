@@ -18,6 +18,13 @@ export interface ReachableStation {
 
 export interface NormalizedGeocode {
   query: string;
+  // address: 住所検索でヒット / transport_node: 駅名検索へフォールバック
+  source: "address" | "transport_node";
+  results: GeocodeResult[];
+}
+
+export interface NormalizedReverseGeocode {
+  coord: { lat: number; lng: number };
   results: GeocodeResult[];
 }
 
@@ -136,11 +143,10 @@ interface RawItemsResponse<T> {
   items?: T[];
 }
 
-export function normalizeGeocode(
-  query: string,
+function geocodeResults(
   raw: RawItemsResponse<RawGeocodeItem>,
-): NormalizedGeocode {
-  const results: GeocodeResult[] = (raw.items ?? [])
+): GeocodeResult[] {
+  return (raw.items ?? [])
     .filter((it) =>
       typeof it.coord?.lat === "number" && typeof it.coord?.lon === "number"
     )
@@ -149,7 +155,35 @@ export function normalizeGeocode(
       lat: it.coord!.lat!,
       lng: it.coord!.lon!,
     }));
-  return { query, results };
+}
+
+export function normalizeGeocode(
+  query: string,
+  raw: RawItemsResponse<RawGeocodeItem>,
+): NormalizedGeocode {
+  return { query, source: "address", results: geocodeResults(raw) };
+}
+
+export function normalizeReverseGeocode(
+  coord: { lat: number; lng: number },
+  raw: RawItemsResponse<RawGeocodeItem>,
+): NormalizedReverseGeocode {
+  return { coord, results: geocodeResults(raw) };
+}
+
+// 駅名などの検索結果を geocode の結果形式に変換する（住所検索が 0 件のときの補完）。
+export function geocodeFromTransport(
+  transport: NormalizedTransport,
+): NormalizedGeocode {
+  return {
+    query: transport.query,
+    source: "transport_node",
+    results: transport.nodes.map((n) => ({
+      name: n.address !== "" ? `${n.name}（${n.address}）` : n.name,
+      lat: n.lat,
+      lng: n.lng,
+    })),
+  };
 }
 
 export function normalizeReachable(
@@ -273,7 +307,27 @@ export async function fetchGeocode(
     word: query,
     limit: "5",
   }, apiKey) as RawItemsResponse<RawGeocodeItem>;
-  return normalizeGeocode(query, raw);
+  const geocoded = normalizeGeocode(query, raw);
+  if (geocoded.results.length > 0) return geocoded;
+  // /address は住所しか引けないため、「東京駅」のような駅名は駅検索でフォールバックする。
+  return geocodeFromTransport(await fetchTransportNode(query, apiKey, 5));
+}
+
+export async function fetchReverseGeocode(
+  coord: { lat: number; lng: number },
+  apiKey: string,
+): Promise<NormalizedReverseGeocode> {
+  const raw = await rapidApiGet(
+    GEOCODING_HOST,
+    "/address/reverse_geocoding",
+    {
+      coord: `${coord.lat},${coord.lng}`,
+      coord_unit: "degree",
+      datum: "wgs84",
+    },
+    apiKey,
+  ) as RawItemsResponse<RawGeocodeItem>;
+  return normalizeReverseGeocode(coord, raw);
 }
 
 export async function fetchReachable(
