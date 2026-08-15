@@ -28,11 +28,57 @@ export interface NormalizedReachable {
   stations: ReachableStation[];
 }
 
+export interface TransportNode {
+  id: string;
+  name: string;
+  ruby: string;
+  types: string[];
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+export interface NormalizedTransport {
+  query: string;
+  nodes: TransportNode[];
+}
+
+export interface RouteSection {
+  type: "point" | "move";
+  name: string;
+  nodeId: string | null;
+  move: string | null;
+  lineName: string | null;
+  timeMinutes: number | null;
+}
+
+export interface RouteCandidate {
+  totalMinutes: number;
+  transfers: number;
+  walkDistance: number;
+  fare: number | null;
+  fromTime: string | null;
+  toTime: string | null;
+  moveTypes: string[];
+  sections: RouteSection[];
+}
+
+export interface NormalizedRoute {
+  origin: { lat: number; lng: number };
+  destination: { lat: number; lng: number };
+  startTime: string;
+  routes: RouteCandidate[];
+}
+
 // RapidAPI hosts（環境変数で上書き可能）
 export const GEOCODING_HOST = Deno.env.get("NAVITIME_GEOCODING_HOST") ??
   "navitime-geocoding.p.rapidapi.com";
 export const REACHABLE_HOST = Deno.env.get("NAVITIME_REACHABLE_HOST") ??
   "navitime-reachable.p.rapidapi.com";
+export const TRANSPORT_HOST = Deno.env.get("NAVITIME_TRANSPORT_HOST") ??
+  "navitime-transport.p.rapidapi.com";
+export const ROUTE_HOST = Deno.env.get("NAVITIME_ROUTE_HOST") ??
+  "navitime-route-totalnavi.p.rapidapi.com";
 
 interface RawCoord {
   lat?: number;
@@ -51,6 +97,39 @@ interface RawReachableItem {
   coord?: RawCoord;
   time?: number;
   transit_count?: number;
+}
+
+interface RawTransportItem {
+  id?: string | number;
+  name?: string;
+  ruby?: string;
+  types?: string[];
+  address_name?: string;
+  coord?: RawCoord;
+}
+
+interface RawRouteSection {
+  type?: string;
+  name?: string;
+  node_id?: string | number;
+  move?: string;
+  line_name?: string;
+  time?: number;
+}
+
+interface RawRouteItem {
+  summary?: {
+    move?: {
+      time?: number;
+      transit_count?: number;
+      walk_distance?: number;
+      from_time?: string;
+      to_time?: string;
+      move_type?: string[];
+      fare?: Record<string, number | undefined>;
+    };
+  };
+  sections?: RawRouteSection[];
 }
 
 interface RawItemsResponse<T> {
@@ -93,6 +172,74 @@ export function normalizeReachable(
     }))
     .sort((a, b) => a.timeMinutes - b.timeMinutes);
   return { origin, term, transitLimit, stations };
+}
+
+export function normalizeTransport(
+  query: string,
+  raw: RawItemsResponse<RawTransportItem>,
+): NormalizedTransport {
+  const nodes: TransportNode[] = (raw.items ?? [])
+    .filter((it) =>
+      typeof it.coord?.lat === "number" && typeof it.coord?.lon === "number"
+    )
+    .map((it) => ({
+      id: String(it.id ?? ""),
+      name: it.name ?? "",
+      ruby: it.ruby ?? "",
+      types: it.types ?? [],
+      address: it.address_name ?? "",
+      lat: it.coord!.lat!,
+      lng: it.coord!.lon!,
+    }));
+  return { query, nodes };
+}
+
+// NAVITIME の運賃は unit_0（きっぷ）/ unit_48（IC）等の複数体系で返るため、
+// IC 運賃を優先し、無ければきっぷ運賃を採用する。
+function pickFare(
+  fare: Record<string, number | undefined> | undefined,
+): number | null {
+  if (!fare) return null;
+  const ic = fare["unit_48"];
+  if (typeof ic === "number") return ic;
+  const ticket = fare["unit_0"];
+  return typeof ticket === "number" ? ticket : null;
+}
+
+export function normalizeRoute(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  startTime: string,
+  raw: RawItemsResponse<RawRouteItem>,
+): NormalizedRoute {
+  const routes: RouteCandidate[] = (raw.items ?? [])
+    .filter((it) => typeof it.summary?.move?.time === "number")
+    .map((it) => {
+      const move = it.summary!.move!;
+      return {
+        totalMinutes: move.time!,
+        transfers: typeof move.transit_count === "number"
+          ? move.transit_count
+          : 0,
+        walkDistance: typeof move.walk_distance === "number"
+          ? move.walk_distance
+          : 0,
+        fare: pickFare(move.fare),
+        fromTime: move.from_time ?? null,
+        toTime: move.to_time ?? null,
+        moveTypes: move.move_type ?? [],
+        sections: (it.sections ?? []).map((s) => ({
+          type: s.type === "move" ? "move" as const : "point" as const,
+          name: s.name ?? "",
+          nodeId: s.node_id !== undefined ? String(s.node_id) : null,
+          move: s.move ?? null,
+          lineName: s.line_name ?? null,
+          timeMinutes: typeof s.time === "number" ? s.time : null,
+        })),
+      };
+    })
+    .sort((a, b) => a.totalMinutes - b.totalMinutes);
+  return { origin, destination, startTime, routes };
 }
 
 async function rapidApiGet(
@@ -139,7 +286,7 @@ export async function fetchReachable(
     start: `${origin.lat},${origin.lng}`,
     term: String(term),
     limit: "200",
-    // 電車駅に絞る（バス停は除外）。実キーでの結合テスト時に調整する。
+    // 電車駅に絞る（バス停は除外）
     node_type: "station",
   };
   if (transitLimit !== null) params.transit_limit = String(transitLimit);
@@ -150,4 +297,30 @@ export async function fetchReachable(
     apiKey,
   ) as RawItemsResponse<RawReachableItem>;
   return normalizeReachable(origin, term, transitLimit, raw);
+}
+
+export async function fetchTransportNode(
+  query: string,
+  apiKey: string,
+  limit = 10,
+): Promise<NormalizedTransport> {
+  const raw = await rapidApiGet(TRANSPORT_HOST, "/transport_node", {
+    word: query,
+    limit: String(limit),
+  }, apiKey) as RawItemsResponse<RawTransportItem>;
+  return normalizeTransport(query, raw);
+}
+
+export async function fetchRoute(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  startTime: string,
+  apiKey: string,
+): Promise<NormalizedRoute> {
+  const raw = await rapidApiGet(ROUTE_HOST, "/route_transit", {
+    start: `${origin.lat},${origin.lng}`,
+    goal: `${destination.lat},${destination.lng}`,
+    start_time: startTime,
+  }, apiKey) as RawItemsResponse<RawRouteItem>;
+  return normalizeRoute(origin, destination, startTime, raw);
 }

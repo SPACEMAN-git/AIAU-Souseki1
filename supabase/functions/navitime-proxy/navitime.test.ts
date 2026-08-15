@@ -1,6 +1,16 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { normalizeGeocode, normalizeReachable } from "./navitime.ts";
-import { mockGeocode, mockReachable } from "./mock.ts";
+import {
+  normalizeGeocode,
+  normalizeReachable,
+  normalizeRoute,
+  normalizeTransport,
+} from "./navitime.ts";
+import {
+  mockGeocode,
+  mockReachable,
+  mockRoute,
+  mockTransport,
+} from "./mock.ts";
 import { handleRequest } from "./index.ts";
 
 Deno.test("normalizeGeocode: NAVITIME items -> results", () => {
@@ -81,6 +91,11 @@ Deno.test("handler: パラメータ不正は 400", async () => {
     "http://local/x?action=reachable&lat=35.6&lng=139.7&term=999",
     "http://local/x?action=reachable&lat=35.6&lng=139.7&term=30&transit_limit=99",
     "http://local/x?action=reachable&lat=35.6&lng=139.7&term=30&transit_limit=1.5",
+    "http://local/x?action=transport",
+    "http://local/x?action=transport&q=渋谷&limit=0",
+    "http://local/x?action=transport&q=渋谷&limit=31",
+    "http://local/x?action=route&from_lat=abc&from_lng=139.767&to_lat=35.658&to_lng=139.701",
+    "http://local/x?action=route&from_lat=35.681&from_lng=139.767&to_lat=35.658&to_lng=139.701&start_time=tomorrow",
     "http://local/x?action=unknown",
   ];
   for (const u of cases) {
@@ -105,6 +120,122 @@ Deno.test("handler: reachable (mock=1) は term 以内の駅のみ返す", async
     ),
     true,
   );
+});
+
+Deno.test("normalizeTransport: transport_node items -> nodes", () => {
+  const raw = {
+    items: [
+      {
+        id: "00003544",
+        name: "渋谷",
+        ruby: "しぶや",
+        types: ["station"],
+        address_name: "東京都渋谷区渋谷",
+        coord: { lat: 35.658424, lon: 139.701509 },
+      },
+      { id: "00000000", name: "coord なしは除外される" },
+    ],
+  };
+  const n = normalizeTransport("渋谷", raw);
+  assertEquals(n.nodes.length, 1);
+  assertEquals(n.nodes[0], {
+    id: "00003544",
+    name: "渋谷",
+    ruby: "しぶや",
+    types: ["station"],
+    address: "東京都渋谷区渋谷",
+    lat: 35.658424,
+    lng: 139.701509,
+  });
+});
+
+Deno.test("normalizeRoute: summary/sections -> routes（IC 運賃優先・所要時間昇順）", () => {
+  const origin = { lat: 35.681, lng: 139.767 };
+  const destination = { lat: 35.658, lng: 139.701 };
+  const raw = {
+    items: [
+      {
+        summary: {
+          move: {
+            time: 41,
+            transit_count: 1,
+            walk_distance: 620,
+            from_time: "2026-08-17T09:00:00+09:00",
+            to_time: "2026-08-17T09:41:00+09:00",
+            move_type: ["local_train", "walk"],
+            fare: { unit_0: 210 },
+          },
+        },
+        sections: [],
+      },
+      {
+        summary: {
+          move: {
+            time: 33,
+            transit_count: 0,
+            walk_distance: 483,
+            from_time: "2026-08-17T09:00:00+09:00",
+            to_time: "2026-08-17T09:33:00+09:00",
+            move_type: ["local_train", "walk"],
+            fare: { unit_0: 260, unit_48: 253 },
+          },
+        },
+        sections: [
+          { type: "point", name: "start" },
+          {
+            type: "move",
+            move: "local_train",
+            line_name: "ＪＲ山手線",
+            time: 24,
+          },
+          { type: "point", name: "渋谷", node_id: "00003544" },
+        ],
+      },
+      { summary: { move: {} }, sections: [] },
+    ],
+  };
+  const n = normalizeRoute(origin, destination, "2026-08-17T09:00:00", raw);
+  assertEquals(n.routes.map((r) => r.totalMinutes), [33, 41]);
+  assertEquals(n.routes[0].fare, 253);
+  assertEquals(n.routes[1].fare, 210);
+  assertEquals(n.routes[0].sections[1].lineName, "ＪＲ山手線");
+  assertEquals(n.routes[0].sections[2].nodeId, "00003544");
+});
+
+Deno.test("mock: transport / route", () => {
+  assertEquals(mockTransport("渋谷").nodes.map((n) => n.name), ["渋谷"]);
+  assertEquals(mockTransport("存在しない", 2).nodes.length, 2);
+  const r = mockRoute(
+    { lat: 35.681, lng: 139.767 },
+    { lat: 35.658, lng: 139.701 },
+    "2026-08-17T09:00:00+09:00",
+  );
+  assertEquals(r.routes.length, 2);
+  assertEquals(r.routes[0].transfers, 0);
+});
+
+Deno.test("handler: transport (mock=1) は normalized 形式を返す", async () => {
+  const res = await handleRequest(
+    new Request("http://local/x?action=transport&q=渋谷&limit=5&mock=1"),
+  );
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.ok, true);
+  assertEquals(body.mock, true);
+  assertEquals(body.data.nodes[0].name, "渋谷");
+});
+
+Deno.test("handler: route (mock=1) は start_time 省略時も 200", async () => {
+  const res = await handleRequest(
+    new Request(
+      "http://local/x?action=route&from_lat=35.681&from_lng=139.767&to_lat=35.658&to_lng=139.701&mock=1",
+    ),
+  );
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.ok, true);
+  assertEquals(body.data.routes.length > 0, true);
+  assertEquals(typeof body.data.routes[0].totalMinutes, "number");
 });
 
 Deno.test("handler: reachable (mock=1) は transit_limit でも絞り込む", async () => {

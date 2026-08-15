@@ -1,5 +1,11 @@
 // RAPIDAPI_KEY なしでも動作確認できる mock レスポンス
-import type { NormalizedGeocode, NormalizedReachable } from "./navitime.ts";
+import type {
+  NormalizedGeocode,
+  NormalizedReachable,
+  NormalizedRoute,
+  NormalizedTransport,
+  TransportNode,
+} from "./navitime.ts";
 
 export function mockGeocode(query: string): NormalizedGeocode {
   return {
@@ -90,5 +96,135 @@ export function mockReachable(
       s.timeMinutes <= term &&
       (transitLimit === null || s.transfers <= transitLimit)
     ),
+  };
+}
+
+const MOCK_NODES: TransportNode[] = [
+  {
+    id: "00006668",
+    name: "東京",
+    ruby: "とうきょう",
+    types: ["station"],
+    address: "東京都千代田区丸の内",
+    lat: 35.681041,
+    lng: 139.767106,
+  },
+  {
+    id: "00003544",
+    name: "渋谷",
+    ruby: "しぶや",
+    types: ["station"],
+    address: "東京都渋谷区渋谷",
+    lat: 35.658424,
+    lng: 139.701509,
+  },
+  {
+    id: "00004155",
+    name: "新宿",
+    ruby: "しんじゅく",
+    types: ["station"],
+    address: "東京都新宿区新宿",
+    lat: 35.690921,
+    lng: 139.70025,
+  },
+];
+
+export function mockTransport(query: string, limit = 10): NormalizedTransport {
+  const matched = MOCK_NODES.filter((n) => n.name.includes(query));
+  const nodes = (matched.length > 0 ? matched : MOCK_NODES).slice(0, limit);
+  return { query, nodes };
+}
+
+export function mockRoute(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  startTime: string,
+): NormalizedRoute {
+  const base = new Date(startTime);
+  const toIso = (minutes: number) =>
+    new Date(base.getTime() + minutes * 60_000).toISOString();
+  return {
+    origin,
+    destination,
+    startTime,
+    routes: [
+      {
+        totalMinutes: 33,
+        transfers: 0,
+        walkDistance: 483,
+        fare: 253,
+        fromTime: toIso(0),
+        toTime: toIso(33),
+        moveTypes: ["local_train", "walk"],
+        sections: [
+          {
+            type: "point",
+            name: "start（mock）",
+            nodeId: null,
+            move: null,
+            lineName: null,
+            timeMinutes: null,
+          },
+          {
+            type: "move",
+            name: "",
+            nodeId: null,
+            move: "walk",
+            lineName: "徒歩",
+            timeMinutes: 5,
+          },
+          {
+            type: "point",
+            name: "東京",
+            nodeId: "00006668",
+            move: null,
+            lineName: null,
+            timeMinutes: null,
+          },
+          {
+            type: "move",
+            name: "",
+            nodeId: null,
+            move: "local_train",
+            lineName: "ＪＲ山手線（mock）",
+            timeMinutes: 24,
+          },
+          {
+            type: "point",
+            name: "渋谷",
+            nodeId: "00003544",
+            move: null,
+            lineName: null,
+            timeMinutes: null,
+          },
+          {
+            type: "move",
+            name: "",
+            nodeId: null,
+            move: "walk",
+            lineName: "徒歩",
+            timeMinutes: 2,
+          },
+          {
+            type: "point",
+            name: "goal（mock）",
+            nodeId: null,
+            move: null,
+            lineName: null,
+            timeMinutes: null,
+          },
+        ],
+      },
+      {
+        totalMinutes: 41,
+        transfers: 1,
+        walkDistance: 620,
+        fare: 199,
+        fromTime: toIso(0),
+        toTime: toIso(41),
+        moveTypes: ["local_train", "walk"],
+        sections: [],
+      },
+    ],
   };
 }
