@@ -1,16 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { AccessStation, ReachableStation } from "../lib/navitimeProxy";
-import { distanceToMultiLineString } from "../lib/geo";
 import type { RailwayLine } from "../lib/railwayCache";
+import { StationMarkerRegistry } from "../lib/markerRegistry";
 import RailwayLayer from "./RailwayLayer";
+import CandidateStationLayer from "./CandidateStationLayer";
+import PrimaryStationLayer from "./PrimaryStationLayer";
+import PropertyLayer, { type PropertyMarkerData } from "./PropertyLayer";
+import WorkplaceLayer from "./WorkplaceLayer";
 import styles from "./CommuteMap.module.css";
-
-// 「この路線沿い」と見なす候補駅までの距離（路線への所属判定の近似）
-const NEAR_LINE_METERS = 300;
 
 // 国土地理院の淡色地図（公開タイル）。web/ の Vite 前端と同じ底図を使う。
 const TILE_URL = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png";
@@ -38,6 +39,8 @@ export interface CommuteMapProps {
   onClearLine?: () => void;
   /** 検索中は地図を軽く伏せる（marker は前回のまま残す） */
   loading?: boolean;
+  /** Task 6: Supabase の listings をそのまま渡す。未指定なら物件 marker は出ない */
+  properties?: PropertyMarkerData[];
   /** Task 6（物件の動的読み込み）用: 地図移動後に現在の中心と bounds を通知する */
   onViewChange?: (view: MapView) => void;
 }
@@ -57,60 +60,6 @@ function toMapView(map: maplibregl.Map): MapView {
   };
 }
 
-// 通勤時間が上限に近いほど控えめに見せる（変えるのは opacity だけ）。
-function stationLevel(timeMinutes: number, term: number): 1 | 2 | 3 {
-  const ratio = term > 0 ? timeMinutes / term : 1;
-  if (ratio <= 1 / 3) return 1;
-  if (ratio <= 2 / 3) return 2;
-  return 3;
-}
-
-function stationPopupContent(
-  station: ReachableStation,
-  access: AccessStation | undefined,
-): HTMLElement {
-  const el = document.createElement("div");
-  el.className = styles.popup;
-  const name = document.createElement("strong");
-  name.textContent = access ? `◉ ${station.name}` : station.name;
-  const time = document.createElement("div");
-  time.textContent = `通勤時間：${station.timeMinutes}分`;
-  const transfers = document.createElement("div");
-  transfers.textContent = `乗換：${station.transfers}回`;
-  el.append(name, time, transfers);
-  if (access) {
-    const walk = document.createElement("div");
-    walk.textContent =
-      `主要起点駅・勤務先から徒歩${access.walkMinutes}分（${access.walkDistance}m）`;
-    el.append(walk);
-  }
-  return el;
-}
-
-// 候補駅リストに含まれない主要起点駅（通勤条件で外れた場合）用の popup
-function accessOnlyPopupContent(access: AccessStation): HTMLElement {
-  const el = document.createElement("div");
-  el.className = styles.popup;
-  const name = document.createElement("strong");
-  name.textContent = `◉ ${access.name}`;
-  const walk = document.createElement("div");
-  walk.textContent =
-    `主要起点駅・勤務先から徒歩${access.walkMinutes}分（${access.walkDistance}m）`;
-  el.append(name, walk);
-  return el;
-}
-
-function workplacePopupContent(name: string): HTMLElement {
-  const el = document.createElement("div");
-  el.className = styles.popup;
-  const label = document.createElement("strong");
-  label.textContent = "★ 勤務先";
-  const value = document.createElement("div");
-  value.textContent = name;
-  el.append(label, value);
-  return el;
-}
-
 export default function CommuteMap(
   {
     workplace,
@@ -121,14 +70,14 @@ export default function CommuteMap(
     selectedLine,
     onClearLine,
     loading,
+    properties,
     onViewChange,
   }: CommuteMapProps,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
-  const workplaceMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const stationMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const registryRef = useRef(new StationMarkerRegistry());
   const onViewChangeRef = useRef(onViewChange);
   onViewChangeRef.current = onViewChange;
 
@@ -155,110 +104,19 @@ export default function CommuteMap(
     mapRef.current = map;
     setMap(map);
 
-    const stationMarkers = stationMarkersRef.current;
     return () => {
       map.remove();
       mapRef.current = null;
       setMap(null);
-      workplaceMarkerRef.current = null;
-      stationMarkers.clear();
     };
   }, []);
 
-  // 勤務先 marker
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    workplaceMarkerRef.current?.remove();
-    workplaceMarkerRef.current = null;
-    if (!workplace) return;
-
-    const el = document.createElement("div");
-    el.className = styles.workplaceMarker;
-    el.textContent = "★";
-    el.title = "勤務先";
-    workplaceMarkerRef.current = new maplibregl.Marker({ element: el })
-      .setLngLat([workplace.lng, workplace.lat])
-      .setPopup(
-        new maplibregl.Popup({ offset: 16 }).setDOMContent(
-          workplacePopupContent(workplace.name),
-        ),
-      )
-      .addTo(map);
-  }, [workplace]);
-
-  // 候補駅 marker（検索ごとに全入れ替え。0 件やエラー時は marker なし）
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    stationMarkersRef.current.forEach((marker) => marker.remove());
-    stationMarkersRef.current.clear();
-
-    const accessById = new Map(accessStations.map((s) => [s.id, s]));
-    // 路線が選ばれている間は、その路線沿いの候補駅を強調し他を弱める
-    const nearLine = (station: ReachableStation): boolean =>
-      selectedLine !== null &&
-      distanceToMultiLineString(station, selectedLine.geometry.coordinates) <=
-        NEAR_LINE_METERS;
-
-    for (const station of stations) {
-      if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) {
-        continue;
-      }
-      const access = accessById.get(station.id);
-      const el = document.createElement("div");
-      el.className = access
-        ? `${styles.stationMarker} ${styles.accessMarker}`
-        : `${styles.stationMarker} ${
-          styles[`level${stationLevel(station.timeMinutes, term)}`]
-        }`;
-      if (access) {
-        const label = document.createElement("span");
-        label.className = styles.accessLabel;
-        label.textContent = station.name;
-        el.append(label);
-      }
-      if (selectedLine) {
-        el.classList.add(
-          nearLine(station) ? styles.onLineMarker : styles.offLineMarker,
-        );
-      }
-      el.title = access
-        ? `${station.name}（主要起点駅・徒歩${access.walkMinutes}分）`
-        : `${station.name} ${station.timeMinutes}分`;
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([station.lng, station.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setDOMContent(
-            stationPopupContent(station, access),
-          ),
-        )
-        .addTo(map);
-      stationMarkersRef.current.set(station.id, marker);
-    }
-
-    // 通勤条件で候補駅から外れた主要起点駅も、地図上には起点として残す
-    for (const access of accessStations) {
-      if (stationMarkersRef.current.has(access.id)) continue;
-      if (!Number.isFinite(access.lat) || !Number.isFinite(access.lng)) continue;
-      const el = document.createElement("div");
-      el.className = `${styles.stationMarker} ${styles.accessMarker}`;
-      const label = document.createElement("span");
-      label.className = styles.accessLabel;
-      label.textContent = access.name;
-      el.append(label);
-      el.title = `${access.name}（主要起点駅・徒歩${access.walkMinutes}分）`;
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([access.lng, access.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setDOMContent(
-            accessOnlyPopupContent(access),
-          ),
-        )
-        .addTo(map);
-      stationMarkersRef.current.set(access.id, marker);
-    }
-  }, [stations, accessStations, term, selectedLine]);
+  // 主要起点駅は専用 layer で描くので候補駅 layer からは外す
+  const primaryIds = useMemo(
+    () => new Set(accessStations.map((s) => s.id)),
+    [accessStations],
+  );
+  const propertyMarkers = useMemo(() => properties ?? [], [properties]);
 
   // 検索成功後は勤務先と候補駅すべてが入る範囲へ移動する
   const fitAll = useCallback(() => {
@@ -289,7 +147,7 @@ export default function CommuteMap(
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focus) return;
-    const marker = stationMarkersRef.current.get(focus.stationId);
+    const marker = registryRef.current.find(focus.stationId);
     if (!marker) return;
     map.easeTo({ center: marker.getLngLat(), zoom: 14, duration: 600 });
     const popup = marker.getPopup();
@@ -299,7 +157,24 @@ export default function CommuteMap(
   return (
     <div className={styles.canvas}>
       <div ref={containerRef} className={styles.map} />
+      {/* 重なり順: base → RailwayLayer → 候補駅 → 主要起点駅 → 物件 → 勤務先 */}
       <RailwayLayer map={map} line={selectedLine} />
+      <CandidateStationLayer
+        map={map}
+        stations={stations}
+        excludeIds={primaryIds}
+        term={term}
+        selectedLine={selectedLine}
+        registry={registryRef.current}
+      />
+      <PrimaryStationLayer
+        map={map}
+        accessStations={accessStations}
+        stations={stations}
+        registry={registryRef.current}
+      />
+      <PropertyLayer map={map} properties={propertyMarkers} />
+      <WorkplaceLayer map={map} workplace={workplace} />
 
       <div className={styles.controls}>
         <button
@@ -355,7 +230,7 @@ export default function CommuteMap(
         </span>
         <span className={styles.legendItem}>
           <span className={`${styles.legendDot} ${styles.legendCandidate}`} />
-          候補駅
+          候補駅（大きく濃いほど通勤時間が短い）
         </span>
         <span className={styles.legendItem}>
           <span className={styles.legendLine} />

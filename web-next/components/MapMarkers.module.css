@@ -1,0 +1,167 @@
+/* marker の重なり順: RailwayLayer < 候補駅 < 主要起点駅 < 物件 < 勤務先。
+   MapLibre の Marker は要素の style.opacity を常に "1" で上書きするため、
+   opacity 系のルールには !important が必要。
+   marker root には position を書かない: MapLibre 側の
+   .maplibregl-marker { position: absolute } を打ち消すと座標に配置されなくなる。
+   ラベルの絶対配置はその absolute な root を基準にできる。 */
+
+.candidate {
+  z-index: 1;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+}
+
+/* 通勤時間の 3 段階。同系色のままサイズ・濃度・透明度だけを変える */
+.level1 {
+  width: 14px;
+  height: 14px;
+  background: #17579f;
+  opacity: 1 !important;
+}
+
+.level2 {
+  width: 11px;
+  height: 11px;
+  background: #2b7fd4;
+  opacity: 0.85 !important;
+}
+
+.level3 {
+  width: 9px;
+  height: 9px;
+  background: #6da5dd;
+  opacity: 0.65 !important;
+}
+
+/* 広域表示では marker を小さくして 200 駅でも読めるようにする */
+.far.level1 {
+  width: 10px;
+  height: 10px;
+}
+
+.far.level2 {
+  width: 8px;
+  height: 8px;
+}
+
+.far.level3 {
+  width: 6px;
+  height: 6px;
+  opacity: 0.55 !important;
+}
+
+/* hover では駅名だけを軽く出す（popup は click のときだけ） */
+.hoverLabel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  display: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(17 24 39 / 88%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.candidate:hover,
+.primary:hover {
+  z-index: 6;
+}
+
+.candidate:hover .hoverLabel,
+.primary:hover .hoverLabel {
+  display: block;
+}
+
+.candidate:hover {
+  opacity: 1 !important;
+}
+
+/* 路線選択中: 沿線の候補駅を強調し、それ以外は視覚優先度を下げる */
+.onLine {
+  box-shadow: 0 0 0 2px rgb(17 24 39 / 25%);
+  opacity: 1 !important;
+}
+
+.offLine {
+  opacity: 0.25 !important;
+}
+
+/* 主要起点駅（最大 3 駅）。駅名ラベルを常時表示するのはここだけ */
+.primary {
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 5px;
+  background: var(--primary-station);
+  box-shadow: var(--shadow-2);
+  cursor: pointer;
+  opacity: 1 !important;
+}
+
+.primaryLabel {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 92%);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* 物件 marker（Task 6 で Supabase の listings を渡す。現状は空） */
+.property {
+  z-index: 3;
+  padding: 0 6px;
+  border: 1.5px solid #fff;
+  border-radius: 999px;
+  background: #7c3aed;
+  box-shadow: var(--shadow-1);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 1 !important;
+}
+
+/* 勤務先は常に最優先で認識できるようにする */
+.workplace {
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--workplace);
+  box-shadow: var(--shadow-2);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 1 !important;
+}
+
+.popup {
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.5;
+}
