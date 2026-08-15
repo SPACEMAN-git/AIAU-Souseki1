@@ -1,5 +1,6 @@
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabaseAdmin.ts'
+import { timeBucket } from '../_shared/cacheKey.ts'
 
 const CACHE_TTL_HOURS = 24 * 30
 
@@ -17,24 +18,35 @@ Deno.serve(async (req) => {
       center?: { lat: number; lng: number }
       mode?: string
       timeLimitMinutes?: number
+      arrivalTime?: string
     }
-    if (!body?.cacheKey || !body.center || !body.timeLimitMinutes) {
+    if (!body?.center || !body.timeLimitMinutes || !body.mode) {
       return jsonResponse({ error: 'invalid body' }, 400)
     }
+    const cacheKey =
+      body.cacheKey ??
+      [
+        `${body.center.lat.toFixed(4)},${body.center.lng.toFixed(4)}`,
+        body.mode,
+        String(body.timeLimitMinutes),
+        timeBucket(body.arrivalTime ?? '09:00'),
+      ].join('|')
     const sb = getAdminClient()
     const { data: hit } = await sb
       .from('isochrone_cache')
       .select('polygon, provider, is_estimated, computed_at')
-      .eq('cache_key', body.cacheKey)
+      .eq('cache_key', cacheKey)
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
     if (hit) {
       return jsonResponse({
-        polygon: hit.polygon,
-        provider: hit.provider,
-        isEstimated: hit.is_estimated,
-        computedAt: hit.computed_at,
-        fromCache: true,
+        isochrone: {
+          polygon: hit.polygon,
+          provider: hit.provider,
+          isEstimated: hit.is_estimated,
+          computedAt: hit.computed_at,
+          fromCache: true,
+        },
       })
     }
 
@@ -78,7 +90,7 @@ Deno.serve(async (req) => {
       computedAt: new Date().toISOString(),
     }
     await sb.from('isochrone_cache').upsert({
-      cache_key: body.cacheKey,
+      cache_key: cacheKey,
       center_lat: body.center.lat,
       center_lng: body.center.lng,
       mode: body.mode ?? '',
@@ -90,7 +102,7 @@ Deno.serve(async (req) => {
         Date.now() + CACHE_TTL_HOURS * 3600 * 1000,
       ).toISOString(),
     })
-    return jsonResponse(result)
+    return jsonResponse({ isochrone: result })
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500)
   }

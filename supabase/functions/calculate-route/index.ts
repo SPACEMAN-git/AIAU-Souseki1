@@ -1,8 +1,10 @@
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabaseAdmin.ts'
+import { commuteCacheKey } from '../_shared/cacheKey.ts'
+import { navitimeKey, navitimeTransitRoute } from '../_shared/navitime.ts'
 
 interface RouteBody {
-  cacheKey: string
+  cacheKey?: string
   origin: { lat: number; lng: number }
   destination: { lat: number; lng: number }
   mode: string
@@ -23,31 +25,33 @@ Deno.serve(async (req) => {
   if (opt) return opt
   try {
     const body = (await req.json()) as RouteBody
-    if (!body?.cacheKey || !body.origin || !body.destination) {
+    if (!body?.origin || !body.destination || !body.mode) {
       return jsonResponse({ error: 'invalid body' }, 400)
     }
+    const cacheKey = body.cacheKey ?? commuteCacheKey(body)
     const sb = getAdminClient()
 
     const { data: hit } = await sb
       .from('commute_cache')
       .select('result, provider, is_estimated, computed_at')
-      .eq('cache_key', body.cacheKey)
+      .eq('cache_key', cacheKey)
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
     if (hit) {
-      return jsonResponse({ ...hit.result, fromCache: true })
+      return jsonResponse({ route: { ...hit.result, fromCache: true } })
     }
 
-    const navitimeKey = Deno.env.get('NAVITIME_API_KEY')
     const orsKey = Deno.env.get('ORS_API_KEY')
     const isTransit = body.mode === 'transit' || body.mode === 'walk_transit'
 
     let result: Record<string, unknown> | null = null
 
-    if (isTransit && navitimeKey) {
-      // NAVITIME route_transit integration point (contract endpoint).
-      // Implement per the contracted API spec; must set isEstimated=false.
-      result = null
+    if (isTransit && navitimeKey()) {
+      result = (await navitimeTransitRoute(
+        body.origin,
+        body.destination,
+        body.arrivalTime,
+      )) as unknown as Record<string, unknown> | null
     } else if (!isTransit && orsKey) {
       const profile =
         body.mode === 'car'
@@ -96,7 +100,7 @@ Deno.serve(async (req) => {
     }
 
     await sb.from('commute_cache').upsert({
-      cache_key: body.cacheKey,
+      cache_key: cacheKey,
       origin_lat: body.origin.lat,
       origin_lng: body.origin.lng,
       dest_lat: body.destination.lat,
@@ -111,7 +115,7 @@ Deno.serve(async (req) => {
       ).toISOString(),
     })
 
-    return jsonResponse(result)
+    return jsonResponse({ route: result })
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500)
   }
