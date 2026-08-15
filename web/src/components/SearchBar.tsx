@@ -122,6 +122,13 @@ export function SearchBar({ onSearch }: { onSearch: () => void }) {
                 {t(locale, 'geocodeNoResult')}
               </p>
             )}
+            {!loading &&
+              candidates.length === 0 &&
+              query.trim().length >= SUGGEST_MIN_LENGTH && (
+                <p className="px-3 pb-2 text-xs text-gray-500">
+                  {t(locale, 'suggestEmpty')}
+                </p>
+              )}
             {candidates.length > 0 && (
               <ul className="max-h-72 w-full overflow-auto border-t border-gray-100">
             {candidates.map((c) => (
