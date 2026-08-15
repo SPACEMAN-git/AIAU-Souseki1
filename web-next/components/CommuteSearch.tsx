@@ -18,6 +18,7 @@ type Status =
     kind: "done";
     workplace: { name: string; lat: number; lng: number };
     stations: ReachableStation[];
+    mock: boolean;
   };
 
 export default function CommuteSearch() {
@@ -70,7 +71,7 @@ export default function CommuteSearch() {
     setStatus({ kind: "loading" });
     try {
       const geo = await geocode(input.address);
-      const first = geo.results[0];
+      const first = geo.data.results[0];
       if (!first) {
         setStatus({ kind: "no_address" });
         return;
@@ -83,7 +84,8 @@ export default function CommuteSearch() {
       setStatus({
         kind: "done",
         workplace: { name: first.name, lat: first.lat, lng: first.lng },
-        stations: r.stations,
+        stations: r.data.stations,
+        mock: geo.mock || r.mock,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -165,6 +167,7 @@ export default function CommuteSearch() {
             勤務先：{status.workplace.name}（
             {status.workplace.lat.toFixed(4)}, {status.workplace.lng.toFixed(4)}
             ）
+            {status.mock && <span className={styles.badge}>モックデータ</span>}
           </p>
           {status.stations.length === 0
             ? (

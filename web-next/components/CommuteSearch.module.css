@@ -88,6 +88,15 @@
   color: #444;
 }
 
+.badge {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid #d08700;
+  border-radius: 999px;
+  color: #d08700;
+  font-size: 0.75rem;
+}
+
 .stationList {
   list-style: none;
   display: flex;

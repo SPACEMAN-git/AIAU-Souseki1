@@ -17,6 +17,8 @@ export interface ReachableStation {
 
 export interface NormalizedGeocode {
   query: string;
+  // 住所検索で 0 件のとき Edge Function が駅名検索にフォールバックする
+  source: "address" | "transport_node";
   results: GeocodeResult[];
 }
 
@@ -41,6 +43,11 @@ interface ProxyErr {
 
 type ProxyResponse<T> = ProxyOk<T> | ProxyErr;
 
+export interface ProxyResult<T> {
+  data: T;
+  mock: boolean;
+}
+
 const PROXY_URL = process.env.NEXT_PUBLIC_NAVITIME_PROXY_URL ??
   (process.env.NEXT_PUBLIC_SUPABASE_URL
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/navitime-proxy`
@@ -54,7 +61,9 @@ export function proxyConfigured(): boolean {
   return PROXY_URL !== null;
 }
 
-async function callProxy<T>(params: Record<string, string>): Promise<T> {
+async function callProxy<T>(
+  params: Record<string, string>,
+): Promise<ProxyResult<T>> {
   if (!PROXY_URL) {
     throw new Error(
       "navitime-proxy の URL が未設定です。NEXT_PUBLIC_SUPABASE_URL または NEXT_PUBLIC_NAVITIME_PROXY_URL を設定してください。",
@@ -80,10 +89,10 @@ async function callProxy<T>(params: Record<string, string>): Promise<T> {
   if (!body.ok) {
     throw new Error(`${body.error.code}: ${body.error.message}`);
   }
-  return body.data;
+  return { data: body.data, mock: body.mock };
 }
 
-export function geocode(query: string): Promise<NormalizedGeocode> {
+export function geocode(query: string): Promise<ProxyResult<NormalizedGeocode>> {
   return callProxy<NormalizedGeocode>({ action: "geocode", q: query });
 }
 
@@ -91,7 +100,7 @@ export function reachable(
   origin: { lat: number; lng: number },
   term: number,
   transitLimit: number | null,
-): Promise<NormalizedReachable> {
+): Promise<ProxyResult<NormalizedReachable>> {
   const params: Record<string, string> = {
     action: "reachable",
     lat: String(origin.lat),
