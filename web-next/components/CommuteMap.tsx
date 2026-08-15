@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { AccessStation, ReachableStation } from "../lib/navitimeProxy";
@@ -34,6 +34,10 @@ export interface CommuteMapProps {
   focus: { stationId: string; seq: number } | null;
   /** 表示中の鉄道路線（常に 1 本だけ。未選択なら null） */
   selectedLine: RailwayLine | null;
+  /** 地図上の路線バーから表示を解除する */
+  onClearLine?: () => void;
+  /** 検索中は地図を軽く伏せる（marker は前回のまま残す） */
+  loading?: boolean;
   /** Task 6（物件の動的読み込み）用: 地図移動後に現在の中心と bounds を通知する */
   onViewChange?: (view: MapView) => void;
 }
@@ -53,7 +57,7 @@ function toMapView(map: maplibregl.Map): MapView {
   };
 }
 
-// 通勤時間が上限に近いほど控えめに見せる（3 段階だけの単純な強弱付け）。
+// 通勤時間が上限に近いほど控えめに見せる（変えるのは opacity だけ）。
 function stationLevel(timeMinutes: number, term: number): 1 | 2 | 3 {
   const ratio = term > 0 ? timeMinutes / term : 1;
   if (ratio <= 1 / 3) return 1;
@@ -115,6 +119,8 @@ export default function CommuteMap(
     term,
     focus,
     selectedLine,
+    onClearLine,
+    loading,
     onViewChange,
   }: CommuteMapProps,
 ) {
@@ -145,7 +151,6 @@ export default function CommuteMap(
       center: [139.767125, 35.681236],
       zoom: 10,
     });
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.on("moveend", () => onViewChangeRef.current?.(toMapView(map)));
     mapRef.current = map;
     setMap(map);
@@ -207,12 +212,17 @@ export default function CommuteMap(
         : `${styles.stationMarker} ${
           styles[`level${stationLevel(station.timeMinutes, term)}`]
         }`;
+      if (access) {
+        const label = document.createElement("span");
+        label.className = styles.accessLabel;
+        label.textContent = station.name;
+        el.append(label);
+      }
       if (selectedLine) {
         el.classList.add(
           nearLine(station) ? styles.onLineMarker : styles.offLineMarker,
         );
       }
-      if (access) el.textContent = "◉";
       el.title = access
         ? `${station.name}（主要起点駅・徒歩${access.walkMinutes}分）`
         : `${station.name} ${station.timeMinutes}分`;
@@ -233,7 +243,10 @@ export default function CommuteMap(
       if (!Number.isFinite(access.lat) || !Number.isFinite(access.lng)) continue;
       const el = document.createElement("div");
       el.className = `${styles.stationMarker} ${styles.accessMarker}`;
-      el.textContent = "◉";
+      const label = document.createElement("span");
+      label.className = styles.accessLabel;
+      label.textContent = access.name;
+      el.append(label);
       el.title = `${access.name}（主要起点駅・徒歩${access.walkMinutes}分）`;
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([access.lng, access.lat])
@@ -248,7 +261,7 @@ export default function CommuteMap(
   }, [stations, accessStations, term, selectedLine]);
 
   // 検索成功後は勤務先と候補駅すべてが入る範囲へ移動する
-  useEffect(() => {
+  const fitAll = useCallback(() => {
     const map = mapRef.current;
     if (!map || !workplace) return;
     const bounds = new maplibregl.LngLatBounds(
@@ -260,8 +273,17 @@ export default function CommuteMap(
         bounds.extend([station.lng, station.lat]);
       }
     }
-    map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 600 });
+    // 凡例と路線バーに marker が隠れないよう padding を取る
+    map.fitBounds(bounds, {
+      padding: { top: 48, right: 48, bottom: 96, left: 48 },
+      maxZoom: 14,
+      duration: 600,
+    });
   }, [workplace, stations]);
+
+  useEffect(() => {
+    fitAll();
+  }, [fitAll]);
 
   // リストからの選択で該当駅へ寄せて popup を開く
   useEffect(() => {
@@ -275,8 +297,98 @@ export default function CommuteMap(
   }, [focus]);
 
   return (
-    <div ref={containerRef} className={styles.map}>
+    <div className={styles.canvas}>
+      <div ref={containerRef} className={styles.map} />
       <RailwayLayer map={map} line={selectedLine} />
+
+      <div className={styles.controls}>
+        <button
+          type="button"
+          className={styles.control}
+          title="拡大"
+          onClick={() => mapRef.current?.zoomIn({ duration: 300 })}
+        >
+          ＋
+        </button>
+        <button
+          type="button"
+          className={styles.control}
+          title="縮小"
+          onClick={() => mapRef.current?.zoomOut({ duration: 300 })}
+        >
+          －
+        </button>
+        <button
+          type="button"
+          className={styles.control}
+          title="勤務先へ戻る"
+          disabled={!workplace}
+          onClick={() =>
+            workplace &&
+            mapRef.current?.easeTo({
+              center: [workplace.lng, workplace.lat],
+              zoom: 14,
+              duration: 600,
+            })}
+        >
+          ★
+        </button>
+        <button
+          type="button"
+          className={styles.control}
+          title="検索範囲にフィット"
+          disabled={!workplace}
+          onClick={fitAll}
+        >
+          ⤢
+        </button>
+      </div>
+
+      <div className={styles.legend}>
+        <span className={styles.legendItem}>
+          <span className={`${styles.legendDot} ${styles.legendWorkplace}`} />
+          勤務先
+        </span>
+        <span className={styles.legendItem}>
+          <span className={`${styles.legendDot} ${styles.legendPrimary}`} />
+          主要起点駅
+        </span>
+        <span className={styles.legendItem}>
+          <span className={`${styles.legendDot} ${styles.legendCandidate}`} />
+          候補駅
+        </span>
+        <span className={styles.legendItem}>
+          <span className={styles.legendLine} />
+          選択中の路線
+        </span>
+      </div>
+
+      {selectedLine && (
+        <div className={styles.lineBar}>
+          <span
+            className={styles.lineBarSwatch}
+            style={{ background: selectedLine.color }}
+          />
+          <span className={styles.lineBarName}>{selectedLine.lineName}</span>
+          {selectedLine.operator && (
+            <span className={styles.lineBarOperator}>
+              {selectedLine.operator}
+            </span>
+          )}
+          {onClearLine && (
+            <button
+              type="button"
+              className={styles.lineBarClose}
+              title="表示を解除"
+              onClick={onClearLine}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+
+      {loading && <div className={styles.loadingVeil} />}
     </div>
   );
 }

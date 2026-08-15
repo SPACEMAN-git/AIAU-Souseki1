@@ -13,7 +13,7 @@ export interface RailwayLine {
 }
 
 // 公式色が取れなかったときだけ使う抑えた既定色
-const FALLBACK_COLOR = "#5a6b7b";
+export const FALLBACK_LINE_COLOR = "#5a6b7b";
 
 const cache = new Map<string, RailwayLine>();
 
@@ -36,7 +36,7 @@ export async function loadRailwayLine(
     lineId: data.lineId,
     lineName: data.lineName,
     operator: data.operator,
-    color: officialColor ?? data.color ?? FALLBACK_COLOR,
+    color: officialColor ?? data.color ?? FALLBACK_LINE_COLOR,
     geometry: normalizeGeometry(data),
   };
   cache.set(lineId, line);

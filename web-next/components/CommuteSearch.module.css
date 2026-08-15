@@ -1,277 +1,55 @@
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 40px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* デスクトップでは検索条件 + 候補駅リストと地図を並べて表示する */
-.layout {
+/* 地図を主画面にする全画面シェル。スクロールするのは左レールの中だけ */
+.shell {
   display: grid;
-  grid-template-columns: minmax(320px, 440px) 1fr;
-  gap: 16px;
-  align-items: start;
+  grid-template-rows: var(--topbar-h) auto 1fr;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-@media (width <= 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.panel {
+.topbar {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 78vh;
-  overflow-y: auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.brand {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.tagline {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.source {
+  margin-left: auto;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  min-height: 0;
 }
 
 .mapPane {
-  position: sticky;
-  top: 16px;
-  height: 78vh;
-  min-height: 420px;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
 }
 
-.title {
-  font-size: 1.6rem;
-}
-
-.subtitle {
-  color: #666;
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-}
-
-.row {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 200px;
-  font-size: 0.9rem;
-}
-
-.field input {
-  padding: 8px 10px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 1rem;
-  background: var(--background);
-  color: var(--foreground);
-}
-
-.validation {
-  color: #c0392b;
-  font-size: 0.9rem;
-}
-
-.button {
-  align-self: flex-start;
-  padding: 10px 24px;
-  border: none;
-  border-radius: 6px;
-  background: #2563eb;
-  color: #fff;
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-.button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.info {
-  color: #666;
-}
-
-.error {
-  color: #c0392b;
-}
-
-.results {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.workplace {
-  font-size: 0.9rem;
-  color: #444;
-}
-
-.badge {
-  margin-left: 0.5rem;
-  padding: 0.05rem 0.4rem;
-  border: 1px solid #d08700;
-  border-radius: 999px;
-  color: #d08700;
-  font-size: 0.75rem;
-}
-
-.accessBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #eee;
-}
-
-.accessTitle {
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.accessStation {
-  border-color: #0f9d58;
-}
-
-/* 路線選択（同時に表示するのは 1 本だけ） */
-.lineBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #eee;
-}
-
-.selectedLine {
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.lineStation {
-  margin-top: 4px;
-  font-size: 0.85rem;
-  opacity: 0.8;
-}
-
-.lineButtons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.lineButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid #ccc;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.lineButton:disabled {
-  cursor: progress;
-  opacity: 0.6;
-}
-
-.lineButtonActive {
-  border-width: 2px;
-  font-weight: 700;
-}
-
-.lineSwatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-}
-
-.count {
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.moreButton {
-  align-self: flex-start;
-  padding: 6px 14px;
-  border: 1px solid #888;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.moreButton:hover {
-  border-color: #444;
-}
-
-.stationList {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.station {
-  display: flex;
-  width: 100%;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.station:hover {
-  border-color: #2563eb;
-}
-
-.stationName {
-  font-weight: 600;
-}
-
-.stationMeta {
-  color: #555;
-  font-size: 0.9rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .form,
-  .station {
-    border-color: #333;
-  }
-
-  .subtitle,
-  .info,
-  .stationMeta {
-    color: #aaa;
-  }
-
-  .workplace {
-    color: #bbb;
-  }
-
-  .field input {
-    border-color: #444;
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 320px 1fr;
   }
 }

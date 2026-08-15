@@ -1,0 +1,236 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-app);
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.summaryLabel {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.summaryName {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.summaryConditions {
+  color: var(--text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: 2px;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.tab {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text-1);
+}
+
+.tabActive {
+  border-bottom-color: var(--brand);
+  color: var(--brand);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sectionNote {
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--candidate);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+
+.primaryCard {
+  border-left-color: var(--primary-station);
+  background: var(--primary-station-weak);
+}
+
+.cardName {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cardMetrics {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.metric {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cardMeta {
+  color: var(--text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.secondary {
+  align-self: flex-start;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-input);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 34px;
+  cursor: pointer;
+}
+
+.secondary:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.emptyState,
+.errorState {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+}
+
+.errorState {
+  border-left: 3px solid var(--danger);
+}
+
+.emptyTitle,
+.errorTitle {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.emptyBody,
+.errorBody {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.errorBody {
+  overflow-wrap: anywhere;
+}
+
+.skeletonList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeletonRow {
+  height: 44px;
+  border-radius: var(--radius-card);
+  background: linear-gradient(
+    90deg,
+    var(--bg-subtle) 25%,
+    #e4e8ee 50%,
+    var(--bg-subtle) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
