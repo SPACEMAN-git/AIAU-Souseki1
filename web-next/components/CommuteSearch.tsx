@@ -9,7 +9,15 @@ import {
   proxyConfigured,
   reachable,
   type ReachableStation,
+  stationLines as fetchStationLines,
+  type StationWithLines,
 } from "../lib/navitimeProxy";
+import {
+  cachedRailwayLine,
+  clearRailwayCache,
+  loadRailwayLine,
+  type RailwayLine,
+} from "../lib/railwayCache";
 import styles from "./CommuteSearch.module.css";
 
 // maplibre-gl はブラウザ専用なので SSR を外す
@@ -44,6 +52,36 @@ export default function CommuteSearch() {
   const [focus, setFocus] = useState<{ stationId: string; seq: number } | null>(
     null,
   );
+  // 主要起点駅ごとの利用可能路線（路線選択 UI 用）。検索ごとに入れ替える
+  const [lineGroups, setLineGroups] = useState<StationWithLines[]>([]);
+  const [selectedLine, setSelectedLine] = useState<RailwayLine | null>(null);
+  const [lineLoadingId, setLineLoadingId] = useState<string | null>(null);
+  const [lineError, setLineError] = useState<string | null>(null);
+
+  // 路線切り替えでは reachable 検索を再実行せず、geometry だけを取得（同一路線は cache）
+  async function onSelectLine(lineId: string, officialColor: string | null) {
+    if (selectedLine?.lineId === lineId) {
+      setSelectedLine(null);
+      return;
+    }
+    setLineError(null);
+    setSelectedLine(cachedRailwayLine(lineId) ?? null);
+    setLineLoadingId(lineId);
+    try {
+      const line = await loadRailwayLine(lineId, officialColor);
+      setSelectedLine(line);
+      if (line.geometry.coordinates.length === 0) {
+        setLineError(
+          `${line.lineName} の路線形状を取得できませんでした（NAVITIME から実形状が返りませんでした）。`,
+        );
+      }
+    } catch (err) {
+      setSelectedLine(null);
+      setLineError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLineLoadingId(null);
+    }
+  }
 
   function validate(): {
     address: string;
@@ -88,6 +126,12 @@ export default function CommuteSearch() {
     setStatus({ kind: "loading" });
     setVisibleCount(PAGE_SIZE);
     setFocus(null);
+    // 新しい検索では前回の選択路線と geometry cache を破棄する
+    setSelectedLine(null);
+    setLineGroups([]);
+    setLineError(null);
+    setLineLoadingId(null);
+    clearRailwayCache();
     try {
       const geo = await geocode(input.address);
       const first = geo.data.results[0];
@@ -111,6 +155,11 @@ export default function CommuteSearch() {
         accessStations: access?.data.stations ?? [],
         mock: geo.mock || r.mock,
       });
+      const accessIds = (access?.data.stations ?? []).map((s) => s.id);
+      if (accessIds.length > 0) {
+        const lines = await fetchStationLines(accessIds).catch(() => null);
+        setLineGroups(lines?.data.stations ?? []);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setStatus({ kind: "error", message });
@@ -234,6 +283,52 @@ export default function CommuteSearch() {
                     </ul>
                   )}
               </div>
+              {lineGroups.length > 0 && (
+                <div className={styles.lineBlock}>
+                  <p className={styles.accessTitle}>鉄道路線（1 本だけ表示）</p>
+                  <p className={styles.selectedLine}>
+                    現在表示中：{selectedLine
+                      ? `${selectedLine.lineName}${
+                        selectedLine.operator
+                          ? `（${selectedLine.operator}）`
+                          : ""
+                      }`
+                      : "なし"}
+                  </p>
+                  {lineGroups.map((group) => (
+                    <div key={`lines-${group.stationId}`}>
+                      <p className={styles.lineStation}>{group.stationName}</p>
+                      <div className={styles.lineButtons}>
+                        {group.lines.map((line) => (
+                          <button
+                            key={`${group.stationId}-${line.lineId}`}
+                            type="button"
+                            className={`${styles.lineButton} ${
+                              selectedLine?.lineId === line.lineId
+                                ? styles.lineButtonActive
+                                : ""
+                            }`}
+                            style={line.color
+                              ? { borderColor: line.color }
+                              : undefined}
+                            disabled={lineLoadingId !== null}
+                            onClick={() =>
+                              onSelectLine(line.lineId, line.color)}
+                          >
+                            <span
+                              className={styles.lineSwatch}
+                              style={{ background: line.color ?? "#5a6b7b" }}
+                            />
+                            {line.lineName}
+                            {lineLoadingId === line.lineId && "（読込中…）"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {lineError && <p className={styles.error}>{lineError}</p>}
+                </div>
+              )}
               {status.stations.length === 0
                 ? (
                   <p className={styles.info}>
@@ -293,6 +388,7 @@ export default function CommuteSearch() {
               : []}
             term={Number(term) || 30}
             focus={focus}
+            selectedLine={selectedLine}
           />
         </div>
       </div>

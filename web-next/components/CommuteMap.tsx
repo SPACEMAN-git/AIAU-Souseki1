@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { AccessStation, ReachableStation } from "../lib/navitimeProxy";
+import { distanceToMultiLineString } from "../lib/geo";
+import type { RailwayLine } from "../lib/railwayCache";
+import RailwayLayer from "./RailwayLayer";
 import styles from "./CommuteMap.module.css";
+
+// 「この路線沿い」と見なす候補駅までの距離（路線への所属判定の近似）
+const NEAR_LINE_METERS = 300;
 
 // 国土地理院の淡色地図（公開タイル）。web/ の Vite 前端と同じ底図を使う。
 const TILE_URL = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png";
@@ -26,6 +32,8 @@ export interface CommuteMapProps {
   term: number;
   /** リストから選ばれた駅へ寄る（同じ駅を再度押しても反応するよう seq を持つ） */
   focus: { stationId: string; seq: number } | null;
+  /** 表示中の鉄道路線（常に 1 本だけ。未選択なら null） */
+  selectedLine: RailwayLine | null;
   /** Task 6（物件の動的読み込み）用: 地図移動後に現在の中心と bounds を通知する */
   onViewChange?: (view: MapView) => void;
 }
@@ -100,11 +108,19 @@ function workplacePopupContent(name: string): HTMLElement {
 }
 
 export default function CommuteMap(
-  { workplace, stations, accessStations, term, focus, onViewChange }:
-    CommuteMapProps,
+  {
+    workplace,
+    stations,
+    accessStations,
+    term,
+    focus,
+    selectedLine,
+    onViewChange,
+  }: CommuteMapProps,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [map, setMap] = useState<maplibregl.Map | null>(null);
   const workplaceMarkerRef = useRef<maplibregl.Marker | null>(null);
   const stationMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const onViewChangeRef = useRef(onViewChange);
@@ -132,11 +148,13 @@ export default function CommuteMap(
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.on("moveend", () => onViewChangeRef.current?.(toMapView(map)));
     mapRef.current = map;
+    setMap(map);
 
     const stationMarkers = stationMarkersRef.current;
     return () => {
       map.remove();
       mapRef.current = null;
+      setMap(null);
       workplaceMarkerRef.current = null;
       stationMarkers.clear();
     };
@@ -172,6 +190,11 @@ export default function CommuteMap(
     stationMarkersRef.current.clear();
 
     const accessById = new Map(accessStations.map((s) => [s.id, s]));
+    // 路線が選ばれている間は、その路線沿いの候補駅を強調し他を弱める
+    const nearLine = (station: ReachableStation): boolean =>
+      selectedLine !== null &&
+      distanceToMultiLineString(station, selectedLine.geometry.coordinates) <=
+        NEAR_LINE_METERS;
 
     for (const station of stations) {
       if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) {
@@ -184,6 +207,11 @@ export default function CommuteMap(
         : `${styles.stationMarker} ${
           styles[`level${stationLevel(station.timeMinutes, term)}`]
         }`;
+      if (selectedLine) {
+        el.classList.add(
+          nearLine(station) ? styles.onLineMarker : styles.offLineMarker,
+        );
+      }
       if (access) el.textContent = "◉";
       el.title = access
         ? `${station.name}（主要起点駅・徒歩${access.walkMinutes}分）`
@@ -217,7 +245,7 @@ export default function CommuteMap(
         .addTo(map);
       stationMarkersRef.current.set(access.id, marker);
     }
-  }, [stations, accessStations, term]);
+  }, [stations, accessStations, term, selectedLine]);
 
   // 検索成功後は勤務先と候補駅すべてが入る範囲へ移動する
   useEffect(() => {
@@ -246,5 +274,9 @@ export default function CommuteMap(
     if (popup && !popup.isOpen()) marker.togglePopup();
   }, [focus]);
 
-  return <div ref={containerRef} className={styles.map} />;
+  return (
+    <div ref={containerRef} className={styles.map}>
+      <RailwayLayer map={map} line={selectedLine} />
+    </div>
+  );
 }

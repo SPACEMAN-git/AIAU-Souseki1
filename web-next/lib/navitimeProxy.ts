@@ -45,6 +45,35 @@ export interface NormalizedReachable {
   stations: ReachableStation[];
 }
 
+// 主要起点駅が属する鉄道路線（路線選択 UI 用）
+export interface StationLine {
+  lineId: string;
+  lineName: string;
+  operator: string | null;
+  color: string | null;
+}
+
+export interface StationWithLines {
+  stationId: string;
+  stationName: string;
+  lines: StationLine[];
+}
+
+export interface NormalizedStationLines {
+  stations: StationWithLines[];
+}
+
+// 選択された 1 路線の実 GeoJSON（NAVITIME route_transit の shape）
+export interface NormalizedRailwayGeometry {
+  lineId: string;
+  lineName: string;
+  operator: string | null;
+  color: string | null;
+  geometry: { type: "MultiLineString"; coordinates: number[][][] };
+  stationIds: string[];
+  requestCount: number;
+}
+
 interface ProxyOk<T> {
   ok: true;
   action: string;
@@ -138,5 +167,23 @@ export function accessStations(
     lng: String(origin.lng),
     walk_limit: String(walkLimit),
     max: String(max),
+  });
+}
+
+export function stationLines(
+  stationIds: string[],
+): Promise<ProxyResult<NormalizedStationLines>> {
+  return callProxy<NormalizedStationLines>({
+    action: "station_lines",
+    ids: stationIds.join(","),
+  });
+}
+
+export function railwayGeometry(
+  lineId: string,
+): Promise<ProxyResult<NormalizedRailwayGeometry>> {
+  return callProxy<NormalizedRailwayGeometry>({
+    action: "railway_geometry",
+    line_id: lineId,
   });
 }
