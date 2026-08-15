@@ -1,4 +1,7 @@
-// MapLibre worker entry bundled by Vite.
-// maplibre-gl resolves its worker via `import.meta.url`, which does not exist
-// after bundling, so the worker is registered explicitly (see setupMaplibre).
-import 'maplibre-gl/dist/maplibre-gl-worker.mjs'
+// MapLibre worker entry bundled by Vite (see setupMaplibre).
+// The namespace is assigned to `self` because maplibre-gl declares its dist
+// files side-effect free, so a bare import would be tree-shaken away and the
+// worker chunk would end up empty.
+import * as worker from 'maplibre-gl/dist/maplibre-gl-worker.mjs'
+
+;(self as unknown as { __maplibreWorker?: unknown }).__maplibreWorker = worker
