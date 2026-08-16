@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SPACEMAN-git/AIAU-Souseki1/agent/suumap-readme-showcase/docs/images/suumap-hero.png" alt="SUUMAP — 通勤条件から、住まいを見つける。" width="100%">
+  <img src="docs/images/suumap-hero.png" alt="SUUMAP — 通勤条件から、住まいを見つける。" width="100%">
 </p>
 
 <h1 align="center">SUUMAP</h1>
@@ -25,24 +25,24 @@
 </p>
 
 > [!IMPORTANT]
-> 現在表示される物件はすべて **架空のデモデータ**です（`is_demo = true`）。実在する募集物件ではありません。実データは正規のライセンス取得後に[...] 
+> 現在表示される物件はすべて **架空のデモデータ**です（`is_demo = true`）。実在する募集物件ではありません。実データは正規のライセンス取得後に[...]
 
 ## 家探し、本当に「駅」から始めますか？
 
-多くの人は、家を探し始める前から通勤先と「何分以内で通いたいか」を決めています。それでも一般的な不動産検索では、候補駅を一つずつ指定��[...] 
+多くの人は、家を探し始める前から通勤先と「何分以内で通いたいか」を決めています。それでも一般的な不動産検索では、候補駅を一つずつ指定[...]
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SPACEMAN-git/AIAU-Souseki1/agent/suumap-readme-showcase/docs/images/suumap-problem.png" alt="従来の駅起点検索が抱える問題" width="100%">
+  <img src="docs/images/suumap-problem.png" alt="従来の駅起点検索が抱える問題" width="100%">
 </p>
 
 SUUMAP が探すのは「駅」ではなく、**通勤条件に合う住まい**です。
 
 ## そこで、SUUMAP。
 
-勤務地・学校などの目的地、移動手段、最大通勤時間を入力すると、条件を満たす候補物件を地図とリストにまとめて表示します。気になる物件を��[...] 
+勤務地・学校などの目的地、移動手段、最大通勤時間を入力すると、条件を満たす候補物件を地図とリストにまとめて表示します。気になる物件を[...]
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SPACEMAN-git/AIAU-Souseki1/agent/suumap-readme-showcase/docs/images/suumap-solution.png" alt="SUUMAP の4つのステップ" width="100%">
+  <img src="docs/images/suumap-solution.png" alt="SUUMAP の4つのステップ" width="100%">
 </p>
 
 ## 4つの特徴
@@ -65,7 +65,7 @@ SUUMAP が探すのは「駅」ではなく、**通勤条件に合う住まい**
 5. 地図上の物件を選び、実際の通勤ルートを確認する
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SPACEMAN-git/AIAU-Souseki1/agent/suumap-readme-showcase/docs/images/suumap-live-demo.png" alt="SUUMAP の通勤時間とルート内訳" width="100%">
+  <img src="docs/images/suumap-live-demo.png" alt="SUUMAP の通勤時間とルート内訳" width="100%">
 </p>
 
 > **「何分」だけでなく、「どう通うか」まで。**
@@ -109,7 +109,7 @@ SUUMAP が探すのは「駅」ではなく、**通勤条件に合う住まい**
       地図＋リスト＋ルート詳細
 ```
 
-経路結果は `commute_cache` とセッション内キャッシュへ保存し、同じ条件的再搜索外部 API を消費しない設計です。
+経路結果は `commute_cache` とセッション内キャッシュへ保存し、同じ条件の再検索で外部 API を消費しない設計です。
 
 ## アーキテクチャ
 
@@ -131,3 +131,145 @@ External APIs
   ├─ OpenStreetMap Nominatim   施設・建物名候補
   └─ Geocoding.jp              住所検索のフォールバック
 ```
+
+| 役割 | 使用技術 |
+| --- | --- |
+| フロントエンド | Vite / React 19 / TypeScript / Zustand / Tailwind CSS v4 |
+| 地図 | MapLibre GL JS / 国土地理院（GSI）淡色地図 |
+| データベース | Supabase PostgreSQL + PostGIS |
+| 公共交通経路 | NAVITIME `route_transit`（RapidAPI） |
+| 徒歩・自転車・自動車 | NAVITIME / OpenRouteService（任意） |
+| API キー保護 | Supabase Edge Functions Secrets |
+| 公開環境 | GitHub Pages + Supabase |
+
+## Business / Future
+
+<p align="center">
+  <img src="docs/images/suumap-business-future.png" alt="SUUMAP の事業構想と今後" width="100%">
+</p>
+
+将来的には、正規のライセンスを取得した実物件データを掲載し、不動産会社とユーザーをつなぐ物件探しのポータルを目指します。
+
+```text
+SUUMAP
+  → 物件発見
+  → 問い合わせ・内見予約
+  → 提携不動産会社
+  → 送客・成約手数料
+```
+
+## セットアップ
+
+### デモモード（API キー不要）
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+ブラウザで <http://localhost:5173/> を開きます。`.env` がない場合もデモモード（`VITE_DEMO_MODE=true` 相当）で起動し、80件の架空物件とデモ駅ネットワーク[...]
+
+### Supabase に接続する
+
+```bash
+supabase db push
+psql < supabase/seed.sql
+supabase functions deploy geocode-place calculate-route calculate-commute-batch calculate-isochrone import-listings
+```
+
+`web/.env`（`web/.env.example` 参照）:
+
+```env
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+VITE_DEMO_MODE=false
+```
+
+### API キー（サーバー側のみ）
+
+```bash
+supabase secrets set NAVITIME_RAPIDAPI_KEY=...
+supabase secrets set ORS_API_KEY=...
+```
+
+| Secret | 既定値 | 用途 |
+| --- | --- | --- |
+| `NAVITIME_RAPIDAPI_HOST` | `navitime-route-totalnavi.p.rapidapi.com` | NAVITIME RapidAPI ホスト |
+| `NAVITIME_MAX_CALLS_PER_REQUEST` | `20` | 1回の検索で使用できる NAVITIME 呼び出し上限 |
+
+キー未設定またはプロバイダー利用不可の場合、フロントエンドはデモ推定モードへ切り替え、画面上に状態を表示します。
+
+<details>
+<summary><strong>NAVITIME の利用上限とテスト時のルール</strong></summary>
+
+NAVITIME（RapidAPI `navitime-route-totalnavi`）は現在 BASIC プラン（月500リクエスト）を使用し、未キャッシュの物件1件につき1リクエストを消費します。
+
+- 1回の検索で使用する NAVITIME 呼び出しは最大20件です。
+- 上限を超える場合、勤務地に近い順で最大20件の実経路を取得します。
+- 経路結果は `commute_cache` に TTL 30日で保存されます。
+- 月間上限到達時は `503 provider_unavailable / quota_exceeded` を返し、UI はデモ推定モードへ切り替わります。
+- デモ推定は駅ネットワークとダイクストラ法による概算であり、実経路とは異なる場合があります。
+- NAVITIME Web ページのスクレイピングは行いません。
+
+</details>
+
+## 公開環境
+
+- **Frontend:** [GitHub Pages](https://spaceman-git.github.io/AIAU-Souseki1/)
+- **Backend:** Supabase（PostGIS Database + Edge Functions）
+- **Repository:** [SPACEMAN-git/AIAU-Souseki1](https://github.com/SPACEMAN-git/AIAU-Souseki1)
+
+GitHub Pages は `main` の `web/**` または `.github/workflows/deploy-pages.yml` が変更された場合に自動デプロイされます。
+
+## CSV インポート
+
+テンプレートは `data/listings_template.csv` です。
+
+必須列:
+
+```text
+external_id, title, address, latitude, longitude, monthly_rent, floor_area
+```
+
+Storage の `imports` バケットにアップロード後、`import-listings` Edge Function を `{ "filePath": "..." }` で呼び出すと、検証・upsert を行い、`listing_import_jobs` に処[...]
+
+## 開発コマンド
+
+```bash
+cd web
+npm run dev
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npx tsx scripts/generateSeed.ts
+```
+
+## リポジトリ構成
+
+```text
+web/        フロントエンド
+supabase/   PostgreSQL / PostGIS・Edge Functions・Migration
+data/       物件 CSV インポートテンプレート
+scripts/    デモデータ生成・開発スクリプト
+docs/       README 用画像・資料
+```
+
+## データ出典・注意
+
+- 地図タイル: [国土地理院](https://maps.gsi.go.jp/development/ichiran.html)
+- 経路・場所検索: NAVITIME（RapidAPI 経由の正規 API）
+- 施設・建物名候補: [OpenStreetMap Nominatim](https://operations.osmfoundation.org/policies/nominatim/)
+- 住所検索フォールバック: Geocoding.jp
+- 自転車・自動車経路（任意）: OpenRouteService
+- 物件データ: 架空の Demo Seed Data
+
+実物件データを扱う場合は、必ず提供元のライセンス条件に従ってください。
+
+---
+
+<p align="center">
+  <strong>通勤条件から、住まいを見つける。</strong><br>
+  Built for the AI × Real Estate Hackathon.
+</p>
