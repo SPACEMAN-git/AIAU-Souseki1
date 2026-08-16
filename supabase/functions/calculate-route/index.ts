@@ -2,6 +2,8 @@ import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabaseAdmin.ts'
 import { commuteCacheKey } from '../_shared/cacheKey.ts'
 import {
+  isDirectMode,
+  navitimeDirectRoute,
   navitimeKey,
   navitimeQuotaExceeded,
   navitimeTransitRoute,
@@ -19,9 +21,10 @@ const CACHE_TTL_HOURS = 24 * 30
 
 /**
  * Server-side single route calculation. Checks commute_cache first,
- * then calls NAVITIME (transit, and walking via its door-to-door
- * candidate) or OpenRouteService (bicycle/car, walking fallback)
- * when the corresponding API keys are configured as function secrets.
+ * then calls NAVITIME (transit, walking via its door-to-door candidate,
+ * driving and cycling via the car / bicycle products) or
+ * OpenRouteService as a fallback for bicycle/car/walking when the
+ * corresponding API keys are configured as function secrets.
  * Returns 503 provider_unavailable when no provider key is set so the
  * frontend can fall back to demo estimation.
  */
@@ -52,6 +55,7 @@ Deno.serve(async (req) => {
     let result: Record<string, unknown> | null = null
 
     const walkOnly = body.mode === 'walk'
+    const direct = isDirectMode(body.mode) ? body.mode : null
 
     if ((isTransit || walkOnly) && navitimeKey()) {
       result = (await navitimeTransitRoute(
@@ -60,7 +64,16 @@ Deno.serve(async (req) => {
         body.arrivalTime,
         walkOnly,
       )) as unknown as Record<string, unknown> | null
-    } else if (!isTransit && orsKey) {
+    } else if (direct && navitimeKey()) {
+      result = (await navitimeDirectRoute(
+        direct,
+        body.origin,
+        body.destination,
+        body.arrivalTime,
+      )) as unknown as Record<string, unknown> | null
+    }
+
+    if (!result && !isTransit && orsKey) {
       const profile =
         body.mode === 'car'
           ? 'driving-car'
