@@ -22,7 +22,7 @@ const dict = {
   area: { ja: '面積', zh: '面积' },
   layout: { ja: '間取り', zh: '户型' },
   buildingAge: { ja: '築年数', zh: '建筑年龄' },
-  stationWalk: { ja: '駅徒歩', zh: '到车站步行' },
+  stationWalk: { ja: '最寄り駅まで徒歩', zh: '到最近车站的步行时间' },
   amenities: { ja: '設備', zh: '设施' },
   petsAllowed: { ja: 'ペット可', zh: '可养宠物' },
   furnished: { ja: '家具付き', zh: '带家具' },
