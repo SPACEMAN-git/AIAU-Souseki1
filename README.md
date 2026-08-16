@@ -32,7 +32,7 @@ data/      物件 CSV インポートテンプレート
 | 地図タイル | 国土地理院（GSI）淡色地図（無料・キー不要、出典表示あり） |
 | 物件検索 | Supabase PostgreSQL + PostGIS（`search_listings_in_radius` RPC） |
 | 場所検索（勤務地） | NAVITIME（駅名・住所、部分一致で複数候補）→ OSM Nominatim（施設・建物名）→ Geocoding.jp（完全な住所）の順に補完。入力途中でも候補を提示します |
-| 経路・所要時間 | NAVITIME `route_transit`（RapidAPI 経由、公共交通・徒歩）／自転車・自動車は OpenRouteService（任意）／いずれも失敗時はデモ推定 |
+| 経路・所要時間 | NAVITIME（RapidAPI 経由）: 公共交通・徒歩は `route_transit`、自動車は `route_car`、自転車は `route_bicycle`／OpenRouteService は自転車・自動車の予備（任意）／いずれも失敗時はデモ推定 |
 | API キーの保護 | すべて Supabase Edge Function の secret。ブラウザには渡しません |
 
 検索は 5 段階の階層型で、外部 API の呼び出し回数を最小化しています。
@@ -45,7 +45,7 @@ data/      物件 CSV インポートテンプレート
 
 ## NAVITIME の利用上限とテスト時のルール
 
-NAVITIME（RapidAPI `navitime-route-totalnavi`）は現在 **BASIC プラン＝月 500 リクエスト**で、バッチ経路 API が存在しません。つまり未キャッシュの物件 1 件ごとに 1 リクエストを消費します。無計画に検索すると数回で月間上限を使い切ってしまうため、以下を守ってください。
+NAVITIME の各 API（`navitime-route-totalnavi` / `navitime-route-car` / `navitime-route-bicycle`）は現在 **BASIC プラン＝それぞれ月 500 リクエスト**で、バッチ経路 API が存在しません。つまり未キャッシュの物件 1 件ごとに 1 リクエストを消費します。無計画に検索すると数回で月間上限を使い切ってしまうため、以下を守ってください。
 
 - **1 回の検索（＝テスト 1 回）で消費する NAVITIME 呼び出しは最大 20 件**。`NAVITIME_MAX_CALLS_PER_REQUEST` の既定値が `20` で、`calculate-commute-batch` が超過分を打ち切ります。
 - 上限を超える候補は勤務地に**近い順**に 20 件まで実経路を取得し、残り（遠く、通勤時間上限を超える可能性が高い物件）は結果から除外します。全件をデモ推定に落とすことはしません。
@@ -85,7 +85,7 @@ VITE_DEMO_MODE=false
 
 ```bash
 supabase secrets set NAVITIME_RAPIDAPI_KEY=...   # NAVITIME（RapidAPI 経由）
-supabase secrets set ORS_API_KEY=...             # OpenRouteService（自転車・自動車、任意）
+supabase secrets set ORS_API_KEY=...             # OpenRouteService（自転車・自動車の予備、任意）
 ```
 
 任意の追加設定:

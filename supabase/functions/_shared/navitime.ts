@@ -1,7 +1,8 @@
 /**
- * NAVITIME transit routing via the RapidAPI gateway
- * (navitime-route-totalnavi). The key is read from function secrets and
- * never reaches the browser.
+ * NAVITIME routing via the RapidAPI gateway: transit and walking come
+ * from navitime-route-totalnavi, driving from navitime-route-car and
+ * cycling from navitime-route-bicycle. The key is read from function
+ * secrets and never reaches the browser.
  */
 
 export interface LatLng {
@@ -42,6 +43,31 @@ const DEFAULT_HOST = 'navitime-route-totalnavi.p.rapidapi.com'
 
 export function navitimeHost(): string {
   return Deno.env.get('NAVITIME_RAPIDAPI_HOST') ?? DEFAULT_HOST
+}
+
+/** Direct (single-vehicle) modes served by their own RapidAPI products. */
+export type DirectMode = 'car' | 'bicycle'
+
+const DIRECT_APIS: Record<
+  DirectMode,
+  { host: string; path: string; label: string; envHost: string }
+> = {
+  car: {
+    host: 'navitime-route-car.p.rapidapi.com',
+    path: 'route_car',
+    label: '車ルート（NAVITIME）',
+    envHost: 'NAVITIME_CAR_RAPIDAPI_HOST',
+  },
+  bicycle: {
+    host: 'navitime-route-bicycle.p.rapidapi.com',
+    path: 'route_bicycle',
+    label: '自転車ルート（NAVITIME）',
+    envHost: 'NAVITIME_BICYCLE_RAPIDAPI_HOST',
+  },
+}
+
+export function isDirectMode(mode: string): mode is DirectMode {
+  return mode === 'car' || mode === 'bicycle'
 }
 
 export function navitimeKey(): string | undefined {
@@ -173,7 +199,10 @@ export function isWalkOnly(item: NavitimeItem): boolean {
   return moves.length > 0 && moves.every((s) => legKind(s.move) === 'walk')
 }
 
-export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
+export function mapNavitimeRoute(
+  item: NavitimeItem,
+  summaryLabel?: string,
+): RouteResult | null {
   const move = item.summary?.move
   const total = move?.time
   if (typeof total !== 'number') return null
@@ -213,9 +242,11 @@ export function mapNavitimeRoute(item: NavitimeItem): RouteResult | null {
   const via = stations.length
     ? `${stations[0]} → ${stations[stations.length - 1]}`
     : 'ドアツードア'
-  const summary = isWalkOnly(item)
-    ? '徒歩ルート（NAVITIME）'
-    : `${via}（乗換${transferCount}回・NAVITIME）`
+  const summary =
+    summaryLabel ??
+    (isWalkOnly(item)
+      ? '徒歩ルート（NAVITIME）'
+      : `${via}（乗換${transferCount}回・NAVITIME）`)
 
   return {
     durationMinutes: Math.round(total),
@@ -266,6 +297,41 @@ export async function navitimeTransitRoute(
   const items = data.items ?? []
   const item = fastest(walkOnly ? items.filter(isWalkOnly) : items)
   return item ? mapNavitimeRoute(item) : null
+}
+
+/**
+ * Calls the NAVITIME car / bicycle routing product for one
+ * origin/destination pair. Both answer with the same item structure as
+ * route_transit (summary + sections + shapes), so the shape follows real
+ * streets instead of the straight line the demo estimator draws.
+ */
+export async function navitimeDirectRoute(
+  mode: DirectMode,
+  origin: LatLng,
+  destination: LatLng,
+  arrivalTime?: string,
+): Promise<RouteResult | null> {
+  const key = navitimeKey()
+  if (!key) return null
+  const api = DIRECT_APIS[mode]
+  const host = Deno.env.get(api.envHost) ?? api.host
+  const params = new URLSearchParams({
+    start: `${origin.lat},${origin.lng}`,
+    goal: `${destination.lat},${destination.lng}`,
+    goal_time: nextWeekdayArrival(arrivalTime),
+    shape: 'true',
+  })
+  const res = await fetch(`https://${host}/${api.path}?${params}`, {
+    headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host },
+  })
+  if (res.status === 429) {
+    quotaExceededAt = Date.now()
+    return null
+  }
+  if (!res.ok) return null
+  const data = (await res.json()) as { items?: NavitimeItem[] }
+  const item = fastest(data.items ?? [])
+  return item ? mapNavitimeRoute(item, api.label) : null
 }
 
 /** NAVITIME candidates are not ordered by duration, so pick explicitly. */
